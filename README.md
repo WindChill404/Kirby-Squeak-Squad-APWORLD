@@ -1,3 +1,5 @@
+Make sure to use newest release!
+
 Disclaimer: I do not have programming experience and created this Archipelago experience with AI. Please let me know of any issues or suggestions on Discord!
 
 # Kirby: Squeak Squad — Archipelago — How to Play
