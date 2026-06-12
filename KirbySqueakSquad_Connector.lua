@@ -1,8 +1,9 @@
--- KirbySqueakSquad_Connector.lua  (v8.3 - kirby-themed native pop-ups)
+-- KirbySqueakSquad_Connector.lua  (v8.4 - fractional heals)
 --
 --   Adds to v7:
 --   * FILLER now has an effect when received: Maxim Tomato / Energy Drink /
---     Invincible Candy refill health; 1-Up adds a life. Effects are queued and
+--     food (Maxim Tomato full, Meat 1/2, Energy Drink 1/3, Cherry 1/6) restores a
+--     fraction of max health; 1-Up adds a life. Effects are queued and
 --     applied the next time you're in a level (Kirby info pointer valid).
 --   * ABILITY_DELAY trimmed to 40 frames (still long enough to dodge the
 --     mid-transition freeze; shorter window before an un-scrolled ability drops).
@@ -186,9 +187,13 @@ local ABILITY_SCROLL = {
     [22] = 'Bubble scroll',
     [23] = 'Metal scroll'
 }
+-- heal = fraction of MAX health restored; life = extra lives
 local FILLER = {
-    ["Maxim Tomato"] = "heal", ["Energy Drink"] = "heal",
-    ["Invincible Candy"] = "heal", ["1-Up"] = "life",
+    ["Maxim Tomato"] = {heal = 1.0},     -- full
+    ["Meat"]         = {heal = 1/2},     -- half
+    ["Energy Drink"] = {heal = 1/3},     -- third
+    ["Cherry"]       = {heal = 1/6},     -- sixth
+    ["1-Up"]         = {life = 1},
 }
 
 -- Kirby-flavored pop-ups -----------------------------------------------------
@@ -200,10 +205,10 @@ local function item_flavor(name)
         return "(*v*) Scroll get!  "..name.." -- ability unlocked!"
     elseif KEY_SEAL[name] then
         return "(>'-')> Key get!  "..name
-    elseif FILLER[name]=="heal" then
-        return "<(^o^)> Yum!  "..name.." restored your health!"
-    elseif FILLER[name]=="life" then
+    elseif FILLER[name] and FILLER[name].life then
         return "p(^_^)q 1-UP!  one more try in your pocket!"
+    elseif FILLER[name] and FILLER[name].heal then
+        return "<(^o^)> Yum!  "..name.." restored some health!"
     elseif name:find("badge") then
         return "(^o^)b Badge get!  "..name
     elseif name:find("seal") then
@@ -263,7 +268,7 @@ local received_scrolls = {}
 local received_bits = {}
 local opened_bits = {}
 local illegal_frames = 0
-local pending_heal = false
+local pending_heal = 0.0   -- accumulated fraction of max HP to restore
 local pending_lives = 0
 
 local function prev_set_bit(idx) local by=math.floor(idx/8); local bi=idx%8; local m=2^bi
@@ -271,9 +276,15 @@ local function prev_set_bit(idx) local by=math.floor(idx/8); local bi=idx%8; loc
 
 local function apply_filler()
     local base=kirby_base()
-    if pending_heal and base then
+    if pending_heal > 0 and base then
         local mx=ru32(base+MAXHP_OFF)
-        if mx>0 and mx<1000 then wu32(base+HP_OFF, mx); pending_heal=false end
+        if mx>0 and mx<1000 then
+            local cur=ru32(base+HP_OFF)
+            local add=math.floor(mx*pending_heal + 0.5)
+            local newhp=cur+add; if newhp>mx then newhp=mx end
+            wu32(base+HP_OFF, newhp)
+            pending_heal=0.0
+        end
     end
     if pending_lives>0 then
         local cur=ru32(LIFE_ADDR)
@@ -294,8 +305,10 @@ local function tick()
             msg(item_flavor(name))
         else
             local fx=FILLER[name]
-            if fx=="life" then pending_lives=pending_lives+1
-            elseif fx=="heal" then pending_heal=true end
+            if fx then
+                if fx.life then pending_lives=pending_lives+fx.life end
+                if fx.heal then pending_heal=pending_heal+fx.heal end
+            end
             msg(item_flavor(name))
         end
     end
@@ -351,6 +364,6 @@ local okc=pcall(rb,COLL)
 if okc then
     local f=read_coll(); local c=0
     for i=0,NUM_BITS-1 do if bit_set(f,i) then c=c+1 end end
-    print("KSS connector ready (v8.3). "..c.." chest locations already collected.")
+    print("KSS connector ready (v8.4). "..c.." chest locations already collected.")
     msg("<(^-^<) Kirby connector ready! let's find some treasure!")
 else print("ERROR reading collectibles field"); msg("x_x  connector: RAM error") end
