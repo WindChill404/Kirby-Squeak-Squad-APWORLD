@@ -1,8 +1,10 @@
+Disclaimer: This was created using AI and a lot of iterative testing, please feel free to suggest any fixes or report any issues to me on Discord.
+
 # Kirby: Squeak Squad — Archipelago — How to Play
 
 A multiworld randomizer for Kirby: Squeak Squad (Nintendo DS). Opening chests and
 clearing stages send checks; you receive your items from Archipelago. Abilities are
-locked behind their scrolls, and boss badges gate access to later worlds.
+locked behind their scrolls, and boss badges gate access to later worlds. 
 
 ---
 
