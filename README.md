@@ -74,7 +74,7 @@ load before you connect the client.
 3. **Load the connector.** With Kirby standing in that first stage, open BizHawk's
    **Lua Console** (Tools → Lua Console) and load
    **`KirbySqueakSquad_Connector.lua`**. It should print:
-   `KSS connector ready (v8.1). 0 chest locations already collected.`
+   `KSS connector ready (v8.3). 0 chest locations already collected.`
    The `0` is your green light. A different number means you're on an old or polluted
    save — start a fresh file and reload.
 
