@@ -5,6 +5,7 @@ from typing import Dict
 from BaseClasses import Location
 LOCATION_BASE_ID = 5_000_100
 STAGECLEAR_BASE_ID = 5_000_300
+ACQUIRED_BASE_ID = 5_000_400
 # (vanilla_name, bit_index, region, stage, required_powers)
 _LOCS = [
     ('Star seal 1', 0, 'NatureNotch', '1', []),
@@ -133,59 +134,79 @@ _STAGECLEAR = [
     ('Prism Plains 3 Clear', 2, 'PrismPlains'),
     ('Prism Plains 4 Clear', 3, 'PrismPlains'),
     ('Prism Plains 5 Clear', 4, 'PrismPlains'),
-    ('Prism Plains 6 Clear', 5, 'PrismPlainsEX'),
-    ('Prism Plains 7 Clear', 6, 'PrismPlains'),
+    ('Prism Plains EX Clear', 5, 'PrismPlainsEX'),
+    ('Prism Plains Boss Clear', 6, 'PrismPlains'),
     ('Nature Notch 1 Clear', 10, 'NatureNotch'),
     ('Nature Notch 2 Clear', 11, 'NatureNotch'),
     ('Nature Notch 3 Clear', 12, 'NatureNotch'),
     ('Nature Notch 4 Clear', 13, 'NatureNotch'),
     ('Nature Notch 5 Clear', 14, 'NatureNotch'),
-    ('Nature Notch 6 Clear', 15, 'NatureNotchEX'),
-    ('Nature Notch 7 Clear', 16, 'NatureNotch'),
+    ('Nature Notch EX Clear', 15, 'NatureNotchEX'),
+    ('Nature Notch Boss Clear', 16, 'NatureNotch'),
     ('Cushy Cloud 1 Clear', 20, 'CushyCloud'),
     ('Cushy Cloud 2 Clear', 21, 'CushyCloud'),
     ('Cushy Cloud 3 Clear', 22, 'CushyCloud'),
     ('Cushy Cloud 4 Clear', 23, 'CushyCloud'),
     ('Cushy Cloud 5 Clear', 24, 'CushyCloud'),
-    ('Cushy Cloud 6 Clear', 25, 'CushyCloudEX'),
-    ('Cushy Cloud 7 Clear', 26, 'CushyCloud'),
+    ('Cushy Cloud EX Clear', 25, 'CushyCloudEX'),
+    ('Cushy Cloud Boss Clear', 26, 'CushyCloud'),
     ('Jam Jungle 1 Clear', 30, 'JamJungle'),
     ('Jam Jungle 2 Clear', 31, 'JamJungle'),
     ('Jam Jungle 3 Clear', 32, 'JamJungle'),
     ('Jam Jungle 4 Clear', 33, 'JamJungle'),
     ('Jam Jungle 5 Clear', 34, 'JamJungle'),
-    ('Jam Jungle 6 Clear', 35, 'JamJungleEX'),
-    ('Jam Jungle 7 Clear', 36, 'JamJungle'),
+    ('Jam Jungle EX Clear', 35, 'JamJungleEX'),
+    ('Jam Jungle Boss Clear', 36, 'JamJungle'),
     ('Vocal Volcano 1 Clear', 40, 'VocalVolcano'),
     ('Vocal Volcano 2 Clear', 41, 'VocalVolcano'),
     ('Vocal Volcano 3 Clear', 42, 'VocalVolcano'),
     ('Vocal Volcano 4 Clear', 43, 'VocalVolcano'),
-    ('Vocal Volcano 6 Clear', 45, 'VocalVolcanoEX'),
-    ('Vocal Volcano 7 Clear', 46, 'VocalVolcano'),
+    ('Vocal Volcano 5 Clear', 44, 'VocalVolcano'),
+    ('Vocal Volcano EX Clear', 45, 'VocalVolcanoEX'),
+    ('Vocal Volcano Boss Clear', 46, 'VocalVolcano'),
     ('Ice Island 1 Clear', 50, 'IceIsland'),
     ('Ice Island 2 Clear', 51, 'IceIsland'),
     ('Ice Island 3 Clear', 52, 'IceIsland'),
     ('Ice Island 4 Clear', 53, 'IceIsland'),
     ('Ice Island 5 Clear', 54, 'IceIsland'),
-    ('Ice Island 6 Clear', 55, 'IceIslandEX'),
-    ('Ice Island 7 Clear', 56, 'IceIsland'),
+    ('Ice Island EX Clear', 55, 'IceIslandEX'),
+    ('Ice Island Boss Clear', 56, 'IceIsland'),
     ('Secret Sea 1 Clear', 60, 'SecretSea'),
     ('Secret Sea 2 Clear', 61, 'SecretSea'),
     ('Secret Sea 3 Clear', 62, 'SecretSea'),
     ('Secret Sea 4 Clear', 63, 'SecretSea'),
     ('Secret Sea 5 Clear', 64, 'SecretSea'),
-    ('Secret Sea 6 Clear', 65, 'SecretSeaEX'),
-    ('Secret Sea 7 Clear', 66, 'SecretSea'),
+    ('Secret Sea EX Clear', 65, 'SecretSeaEX'),
+    ('Secret Sea Boss Clear', 66, 'SecretSea'),
     ('Gamble Galaxy 1 Clear', 70, 'GambleGalaxy'),
     ('Gamble Galaxy 2 Clear', 71, 'GambleGalaxy'),
     ('Gamble Galaxy 3 Clear', 72, 'GambleGalaxy'),
-    ('Gamble Galaxy 7 Clear', 76, 'GambleGalaxy')
+    ('Gamble Galaxy Boss Clear', 76, 'GambleGalaxy')
 ]
+# Ability-acquired locations: created only when the ability_checks option is on.
+# (name, ability_index, ability)  id = ACQUIRED_BASE_ID + index ; gated on Progressive <ability>.
+ACQUIRED_REGION_NAME = "PrismPlains"   # always-reachable; gated by the ability rule
+_ACQUIRED = [
+    ('Fire Ability', 0, 'Fire'), ('Ice Ability', 1, 'Ice'), ('Spark Ability', 2, 'Spark'),
+    ('Beam Ability', 3, 'Beam'), ('Tornado Ability', 4, 'Tornado'), ('Hammer Ability', 5, 'Hammer'),
+    ('Cupid Ability', 6, 'Cupid'), ('Cutter Ability', 7, 'Cutter'), ('Laser Ability', 8, 'Laser'),
+    ('Bomb Ability', 9, 'Bomb'), ('Wheel Ability', 10, 'Wheel'), ('HiJump Ability', 11, 'HiJump'),
+    ('UFO Ability', 12, 'UFO'), ('Sword Ability', 13, 'Sword'), ('Ninja Ability', 14, 'Ninja'),
+    ('Fighter Ability', 15, 'Fighter'), ('Throw Ability', 16, 'Throw'), ('Magic Ability', 17, 'Magic'),
+    ('Animal Ability', 18, 'Animal'), ('Bubble Ability', 19, 'Bubble'), ('Metal Ability', 20, 'Metal'),
+    ('Parasol Ability', 21, 'Parasol'), ('Sleep Ability', 22, 'Sleep')
+]
+ACQUIRED_ABILITY: Dict[str,str] = {n:a for n,i,a in _ACQUIRED}
+ACQUIRED_REGION_NAME = "PrismPlains"   # always-reachable; real gate is the Progressive item
 location_name_to_id: Dict[str,int] = {n: LOCATION_BASE_ID+i for n,i,r,s,p in _LOCS}
 for n,key,region in _STAGECLEAR: location_name_to_id[n]=STAGECLEAR_BASE_ID+key
+for n,i,a in _ACQUIRED: location_name_to_id[n]=ACQUIRED_BASE_ID+i
 LOCATION_REGION: Dict[str,str] = {n:r for n,i,r,s,p in _LOCS}
 for n,key,region in _STAGECLEAR: LOCATION_REGION[n]=region
+for n,i,a in _ACQUIRED: LOCATION_REGION[n]=ACQUIRED_REGION_NAME
 LOCATION_POWERS: Dict[str,list] = {n:p for n,i,r,s,p in _LOCS}
+# acquired locations live in their own list; created only when the option is on
+ACQUIRED_LOCATIONS = [n for n,i,a in _ACQUIRED]
 ALL_LOCATIONS=[n for n,i,r,s,p in _LOCS]+[n for n,key,region in _STAGECLEAR]
 VICTORY_EVENT="Strawberry Shortcake"
 class KSSLocation(Location):

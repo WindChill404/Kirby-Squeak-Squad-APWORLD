@@ -28,8 +28,32 @@ class ChestGoalCount(Range):
     default = 70
 
 
+class AbilityChecks(Toggle):
+    """Add a check for the first time you use each copy ability you've received.
+
+    Adds 23 ability-acquired locations (one per ability) and 23 more filler items
+    to match. Off = no ability-use checks.
+    """
+    display_name = "Ability Acquired Checks"
+
+
+class RandomStartingColor(Toggle):
+    """Tint Kirby a random color each seed (cosmetic only).
+
+    Picks one of Kirby's render colors per seed and holds it while you're in a stage.
+    This is purely visual and safe (it only writes the live render byte, never your
+    save). Two quirks: the game repaints Kirby from his saved color on some menus
+    (most noticeably the collection screen), so the tint briefly reverts there and
+    snaps back on the next gameplay frame; and spray paints can't change your color
+    while this is on.
+    """
+    display_name = "Random Starting Color"
+
+
 @dataclass
 class KirbySqueakSquadOptions(PerGameCommonOptions):
     death_link: DeathLink
     goal: Goal
     chest_goal_count: ChestGoalCount
+    ability_checks: AbilityChecks
+    random_starting_color: RandomStartingColor

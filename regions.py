@@ -3,7 +3,8 @@ from typing import TYPE_CHECKING
 from BaseClasses import Region, ItemClassification
 from worlds.generic.Rules import set_rule
 from .locations import (location_name_to_id, LOCATION_REGION, LOCATION_POWERS,
-                        ALL_LOCATIONS, KSSLocation, VICTORY_EVENT)
+                        ALL_LOCATIONS, KSSLocation, VICTORY_EVENT, ACQUIRED_ABILITY,
+                        ACQUIRED_LOCATIONS)
 from .items import KSSItem
 if TYPE_CHECKING:
     from . import KirbySqueakSquadWorld
@@ -27,8 +28,8 @@ EDGES = [
 ]
 ENTRY_REGION = "PrismPlains"
 
-def _scrolls_for(powers):
-    return [p + " scroll" for p in powers]
+def _abilities_for(powers):
+    return ["Progressive " + p for p in powers]
 
 def create_regions(world: "KirbySqueakSquadWorld") -> None:
     p, mw = world.player, world.multiworld
@@ -42,8 +43,15 @@ def create_regions(world: "KirbySqueakSquadWorld") -> None:
         rg.locations.append(L)
         powers = LOCATION_POWERS.get(loc, [])
         if powers:
-            scrolls = _scrolls_for(powers)
-            set_rule(L, lambda state, s=tuple(scrolls): state.has_all(s, p))
+            progs = _abilities_for(powers)
+            set_rule(L, lambda state, s=tuple(progs): state.has_all(s, p))
+    if getattr(world.options, "ability_checks", 0):
+        for loc in ACQUIRED_LOCATIONS:
+            rg = regions[LOCATION_REGION[loc]]
+            L = KSSLocation(p, loc, location_name_to_id[loc], rg)
+            rg.locations.append(L)
+            prog = "Progressive " + ACQUIRED_ABILITY[loc]
+            set_rule(L, lambda state, a=prog: state.has(a, p))
     gg = regions["GambleGalaxy"]
     vic = KSSLocation(p, VICTORY_EVENT, None, gg)
     vic.place_locked_item(KSSItem("Victory", ItemClassification.progression, None, p))

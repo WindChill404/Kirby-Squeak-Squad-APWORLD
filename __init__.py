@@ -18,7 +18,7 @@ components.append(Component(
     component_type=Type.CLIENT,
     icon="kss_icon",
 ))
-from .items import ITEM_TABLE, item_name_to_id, KSSItem
+from .items import ITEM_TABLE, item_name_to_id, KSSItem, ITEM_BASE_ID
 from .locations import location_name_to_id
 from .regions import create_regions
 from .rules import set_rules
@@ -38,14 +38,27 @@ class KirbySqueakSquadWorld(World):
     item_name_to_id: ClassVar = item_name_to_id
     location_name_to_id: ClassVar = location_name_to_id
 
+    def generate_early(self) -> None:
+        # pick the random starting color once (per seed) so fill_slot_data is stable.
+        self.start_color = None
+        if self.options.random_starting_color:
+            self.start_color = self.random.randint(0, 18)  # 19 render colors
+
     def create_item(self, name: str) -> KSSItem:
         cls, _ = ITEM_TABLE[name]
         return KSSItem(name, cls, item_name_to_id[name], self.player)
 
     def create_items(self) -> None:
+        from .items import FILLER_NAMES
+        pool = []
         for name, (_cls, qty) in ITEM_TABLE.items():
             for _ in range(qty):
-                self.multiworld.itempool.append(self.create_item(name))
+                pool.append(self.create_item(name))
+        if self.options.ability_checks:
+            # 23 ability-acquired locations were added; balance with 23 more filler
+            for i in range(23):
+                pool.append(self.create_item(FILLER_NAMES[i % len(FILLER_NAMES)]))
+        self.multiworld.itempool += pool
 
     def create_regions(self) -> None:
         create_regions(self)
@@ -54,10 +67,14 @@ class KirbySqueakSquadWorld(World):
         set_rules(self)
 
     def fill_slot_data(self) -> dict:
-        return {
+        data = {
             "goal": self.options.goal.value,
             "chest_goal_count": int(self.options.chest_goal_count.value),
+            "death_link": int(self.options.death_link.value),
         }
+        if getattr(self, "start_color", None) is not None:
+            data["start_color"] = int(self.start_color)
+        return data
 
     def generate_output(self, output_directory: str) -> None:
         """Emit the .apkss patch into the room download for this player."""

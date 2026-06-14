@@ -34,7 +34,9 @@ except Exception:
         _ID_TO_NAME = {}
 LOCATION_BASE_ID = 5_000_100
 STAGECLEAR_BASE_ID = 5_000_300
+ACQUIRED_BASE_ID = 5_000_400
 STAGECLEAR_VBASE = 200
+ACQUIRED_VBASE = 400
 CHEST_LOC_LO, CHEST_LOC_HI = 5_000_100, 5_000_219   # chest locations
 DAROACH_LOC = 5_000_356                              # Ice Island boss stage clear
 
@@ -42,6 +44,8 @@ TEMP = os.environ.get("TEMP") or tempfile.gettempdir()
 CHECKS_FILE = os.path.join(TEMP, "kss_checks.txt")
 ITEMS_FILE  = os.path.join(TEMP, "kss_items.txt")
 GOAL_FILE   = os.path.join(TEMP, "kss_goal.txt")
+DEATH_OUT_FILE = os.path.join(TEMP, "kss_death_out.txt")  # connector -> here: Kirby died (send-only)
+COLOR_FILE     = os.path.join(TEMP, "kss_color.txt")      # here -> connector: starting color index
 
 
 class KSSCommandProcessor(ClientCommandProcessor):
@@ -64,6 +68,20 @@ class KSSCommandProcessor(ClientCommandProcessor):
             c = counts[nm]
             logger.info(f"  {nm}" + (f" x{c}" if c > 1 else ""))
 
+    def _cmd_chests(self):
+        """Show how many chests you've collected (and goal progress)."""
+        ctx = self.ctx
+        checked = getattr(ctx, "checked_locations", set()) or set()
+        n_chests = sum(1 for loc in checked if CHEST_LOC_LO <= loc <= CHEST_LOC_HI)
+        logger.info(f"Chests collected: {n_chests} / 119")
+        if ctx.goal_mode == 1:
+            daroach = DAROACH_LOC in checked
+            logger.info(f"Goal (chests_and_daroach): need {ctx.goal_count} chests + Daroach.")
+            logger.info(f"  progress: {min(n_chests, ctx.goal_count)}/{ctx.goal_count} chests, "
+                        f"Daroach {'beaten' if daroach else 'not yet'}")
+        else:
+            logger.info("Goal is beat_game; chest count above is informational.")
+
 
 class KSSContext(CommonContext):
     game = GAME_NAME
@@ -77,10 +95,17 @@ class KSSContext(CommonContext):
         self._goal_done = False
         self.goal_mode = 0          # 0 beat_game, 1 chests_and_daroach
         self.goal_count = 70
+        self.death_link_on = False
+        self._last_death_out = None
         try:
             open(ITEMS_FILE, "w").close()
         except OSError:
             pass
+
+    def on_deathlink(self, data):
+        # Death link is SEND-ONLY: we broadcast our own deaths but do not apply incoming
+        # ones (KSS can't be killed safely via RAM). Swallow the remote death quietly.
+        super().on_deathlink(data)
 
     async def server_auth(self, password_requested: bool = False):
         if password_requested and not self.password:
@@ -93,6 +118,21 @@ class KSSContext(CommonContext):
             slot_data = args.get("slot_data") or {}
             self.goal_mode = int(slot_data.get("goal", 0))
             self.goal_count = int(slot_data.get("chest_goal_count", 70))
+            # death link: enable the tag and prime the local-death cursor
+            self.death_link_on = bool(slot_data.get("death_link", 0))
+            if self.death_link_on:
+                try:
+                    with open(DEATH_OUT_FILE, "r", encoding="utf-8") as f:
+                        self._last_death_out = f.read().strip()
+                except OSError:
+                    self._last_death_out = None
+                Utils.async_start(self.update_death_link(True))
+            if "start_color" in slot_data:
+                try:
+                    with open(COLOR_FILE, "w", encoding="utf-8") as f:
+                        f.write(str(int(slot_data["start_color"])))
+                except OSError:
+                    pass
             if self.goal_mode == 1:
                 logger.info(f"Goal: collect {self.goal_count} chests and beat Daroach "
                             f"(Ice Island boss).")
@@ -124,7 +164,7 @@ class KSSContext(CommonContext):
             logger.error(f"item write failed: {e}")
 
     def read_checks(self):
-        # 0..119 -> chest (LOCATION_BASE_ID+idx); 200+(10*w+sub) -> stage clear
+        # 0..119 chest; 200+(10*w+sub) stage clear; 400+ability_idx ability-acquired
         out = []
         try:
             with open(CHECKS_FILE, "r", encoding="utf-8") as f:
@@ -136,7 +176,9 @@ class KSSContext(CommonContext):
                     if idx in self._checks_sent:
                         continue
                     self._checks_sent.add(idx)
-                    if idx >= STAGECLEAR_VBASE:
+                    if idx >= ACQUIRED_VBASE:
+                        out.append(ACQUIRED_BASE_ID + (idx - ACQUIRED_VBASE))
+                    elif idx >= STAGECLEAR_VBASE:
                         out.append(STAGECLEAR_BASE_ID + (idx - STAGECLEAR_VBASE))
                     else:
                         out.append(LOCATION_BASE_ID + idx)
@@ -174,6 +216,16 @@ async def game_watcher(ctx: KSSContext):
             if locs:
                 await ctx.send_msgs([{"cmd": "LocationChecks", "locations": locs}])
             ctx._write_items()
+            # death link: forward a local death to the server
+            if ctx.death_link_on:
+                try:
+                    with open(DEATH_OUT_FILE, "r", encoding="utf-8") as f:
+                        v = f.read().strip()
+                except OSError:
+                    v = None
+                if v and v != ctx._last_death_out:
+                    ctx._last_death_out = v
+                    await ctx.send_death(f"{ctx.player_names.get(ctx.slot, 'Kirby')} lost a life.")
             if ctx.goal_reached() and not ctx.finished_game:
                 await ctx.send_msgs([{"cmd": "StatusUpdate",
                                       "status": ClientStatus.CLIENT_GOAL}])

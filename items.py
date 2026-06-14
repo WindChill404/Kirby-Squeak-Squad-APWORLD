@@ -1,4 +1,9 @@
-"""Items for Kirby: Squeak Squad. Scrolls and boss badges are progression."""
+"""Items for Kirby: Squeak Squad.
+Boss badges, keys, star seals, and Progressive Ability items are progression.
+Each copy ability is a Progressive item: x1 lets you USE the base ability
+(enforced by the connector's ability watchdog); x2 sets that ability's scroll
+bit in RAM, giving the upgraded scroll version.
+"""
 from typing import Dict, Tuple
 from BaseClasses import Item, ItemClassification
 ITEM_BASE_ID = 5_000_000
@@ -32,29 +37,8 @@ _ITEMS = [
     ('Ghost medal_5', 25, 'filler'),
     ('Ghost medal_6', 26, 'filler'),
     ('Ghost medal_7', 27, 'filler'),
-    ('Fire scroll', 28, 'progression'),
-    ('Ice scroll', 29, 'progression'),
-    ('Spark scroll', 30, 'progression'),
-    ('Beam scroll', 31, 'progression'),
-    ('Tornado scroll', 32, 'progression'),
     ('Enemy Sounds', 33, 'filler'),
-    ('Hammer scroll', 34, 'progression'),
-    ('Cupid scroll', 35, 'progression'),
-    ('Cutter scroll', 36, 'progression'),
-    ('Laser scroll', 37, 'progression'),
-    ('Bomb scroll', 38, 'progression'),
-    ('Wheel scroll', 39, 'progression'),
-    ('HiJump scroll', 40, 'progression'),
-    ('UFO scroll', 41, 'progression'),
     ('Copy palette 4', 42, 'filler'),
-    ('Sword scroll', 43, 'progression'),
-    ('Ninja scroll', 44, 'progression'),
-    ('Fighter scroll', 45, 'progression'),
-    ('Throw scroll', 46, 'progression'),
-    ('Magic scroll', 47, 'progression'),
-    ('Animal scroll', 48, 'progression'),
-    ('Bubble scroll', 49, 'progression'),
-    ('Metal scroll', 50, 'progression'),
     ('Party Notes', 51, 'filler'),
     ('Beginning Notes', 52, 'filler'),
     ('Happy Notes', 53, 'filler'),
@@ -63,7 +47,6 @@ _ITEMS = [
     ('Familiar Notes', 56, 'filler'),
     ('Secret Notes', 57, 'filler'),
     ("Kirby's Sounds", 58, 'filler'),
-    ('Parasol scroll', 59, 'progression'),
     ('Graphic piece_13', 60, 'filler'),
     ('Secret Sounds', 61, 'filler'),
     ('King DeDeDe badge', 62, 'progression'),
@@ -93,7 +76,6 @@ _ITEMS = [
     ('White', 86, 'filler'),
     ('Lavender', 87, 'filler'),
     ('Copy palette 1', 88, 'filler'),
-    ('Sleep scroll', 89, 'progression'),
     ('Copy palette 3', 90, 'filler'),
     ('Copy palette 5', 91, 'useful'),
     ('Copy palette 2', 92, 'filler'),
@@ -124,16 +106,51 @@ _ITEMS = [
     ('Vitality half_3', 117, 'useful'),
     ('Graphic piece_10', 118, 'useful')
 ]
+# Progressive copy-ability items (replace the old per-ability scroll items).
+_PROGRESSIVE = [
+    ('Progressive Fire', 500, 'progression'),
+    ('Progressive Ice', 501, 'progression'),
+    ('Progressive Spark', 502, 'progression'),
+    ('Progressive Beam', 503, 'progression'),
+    ('Progressive Tornado', 504, 'progression'),
+    ('Progressive Hammer', 505, 'progression'),
+    ('Progressive Cupid', 506, 'progression'),
+    ('Progressive Cutter', 507, 'progression'),
+    ('Progressive Laser', 508, 'progression'),
+    ('Progressive Bomb', 509, 'progression'),
+    ('Progressive Wheel', 510, 'progression'),
+    ('Progressive HiJump', 511, 'progression'),
+    ('Progressive UFO', 512, 'progression'),
+    ('Progressive Sword', 513, 'progression'),
+    ('Progressive Ninja', 514, 'progression'),
+    ('Progressive Fighter', 515, 'progression'),
+    ('Progressive Throw', 516, 'progression'),
+    ('Progressive Magic', 517, 'progression'),
+    ('Progressive Animal', 518, 'progression'),
+    ('Progressive Bubble', 519, 'progression'),
+    ('Progressive Metal', 520, 'progression'),
+    ('Progressive Parasol', 521, 'progression'),
+    ('Progressive Sleep', 522, 'progression')
+]
 _FILLER = [
-    ('Maxim Tomato', 200, 'filler', 8),
-    ('Meat', 204, 'filler', 10),
-    ('Energy Drink', 201, 'filler', 11),
-    ('Cherries', 205, 'filler', 12),
-    ('1-Up', 202, 'filler', 10)
+
+    ('Maxim Tomato', 200, 'filler', 3),
+    ('Meat', 204, 'filler', 4),
+    ('Energy Drink', 201, 'filler', 4),
+    ('Cherries', 205, 'filler', 4),
+    ('1-Up', 202, 'filler', 4),
+    ('Hamburger', 206, 'filler', 2),
+    ('Nikuman', 207, 'filler', 2),
+    ('Omelet', 208, 'filler', 2),
+    ('Rice Ball', 209, 'filler', 2),
+    ('Pudding', 210, 'filler', 2)
 ]
 ITEM_TABLE: Dict[str, Tuple] = {n:(_IC[c],1) for n,i,c in _ITEMS}
+for n,i,c in _PROGRESSIVE: ITEM_TABLE[n]=(_IC[c],2)          # two copies each
 for n,off,c,q in _FILLER: ITEM_TABLE[n]=(_IC[c],q)
+FILLER_NAMES = [n for n,off,c,q in _FILLER]
 item_name_to_id: Dict[str,int] = {n: ITEM_BASE_ID+i for n,i,c in _ITEMS}
+for n,i,c in _PROGRESSIVE: item_name_to_id[n]=ITEM_BASE_ID+i
 for n,off,c,q in _FILLER: item_name_to_id[n]=ITEM_BASE_ID+off
 class KSSItem(Item):
     game = "Kirby Squeak Squad"
