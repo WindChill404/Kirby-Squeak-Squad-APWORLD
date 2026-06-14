@@ -1,6 +1,6 @@
 Make sure to use the newest release!
 
-Disclaimer: I do not have programming experience and created this Archipelago experience with AI. Please let me know of any issues or suggestions on Discord!
+Disclaimer: I do not have programming experience and created this Archipelago experience with AI. Please let me know of any issues or suggestions on Discord! Instructions from it that are currently in the process of me reviewing/editing to make a little more human:
 
 # Kirby: Squeak Squad — Archipelago — How to Play
 
@@ -26,8 +26,7 @@ that ships in the same release as the apworld.
 
 ## One-time install
 
-1. Drop **`kirby_squeak_squad.apworld`** into Archipelago's `custom_worlds` folder
-   (replace any older copy).
+1. Install the .apworld by double clicking on it after download. You can try installing it through the client but it was weird a few times for me.
 2. Launch the Archipelago Launcher. You should see a **"Kirby Squeak Squad Client"**
    button with the Kirby icon. That confirms the apworld is installed.
 
@@ -40,7 +39,7 @@ that ships in the same release as the apworld.
 2. Generate / host the game (locally or on archipelago.gg) like any other AP game.
    Successful generation means the logic held (badge + scroll gating included).
 
-### Optional settings (YAML)
+### Optional settings (YAML) - Works well in Options Creator!
 
 By default the goal is to **beat the game** and no extras are on. To change things,
 add any of these to your YAML:
@@ -53,7 +52,7 @@ add any of these to your YAML:
 - `death_link: true` — **send-only.** When on, your deaths are broadcast to the
   multiworld, so other Death Link players die when Kirby dies. Incoming deaths do
   **not** kill Kirby — the game can't be killed safely from outside, so this only
-  sends.
+  sends. (Currently receiving had been putting Kirby in a weird state of 0 hp but still alive)
 - `ability_checks: true` — adds a check the first time you use each copy ability you
   receive (23 extra locations, balanced with 23 extra filler items).
 - `random_starting_color: true` — tints Kirby a random color each seed. Purely
@@ -61,7 +60,7 @@ add any of these to your YAML:
   Two quirks: opening the **collection screen** (and a few menus) makes the game
   repaint Kirby from his saved color, so the tint briefly reverts and snaps back the
   next time you're in a stage; and spray paints can't change your color while this
-  is on.
+  is on. Best way to reload your color is by trying to eat an enemy with a copy ability or beating a stage.
 
 When you connect, the client logs which goal is active, so you can confirm it took.
 
@@ -82,11 +81,12 @@ load before you connect the client.
    - Do this **before opening any chests**. The connector treats whatever is already
      collected as "already done," so load it while your count is still 0. (1-1 has
      no chests, so it's the natural spot.)
+   - When re-connecting, it should be fine to do on just the stage select, it'll load all the checks you have gotten then you can continue from there.
 
 2. **(Only if needed) delete** `kss_checks.txt`, `kss_items.txt`, `kss_goal.txt` from
    your `%TEMP%` folder. You normally do **not** need to — the connector clears its
    own files on load. Only do this after a crash, a force-quit, or when switching to
-   a different room/seed.
+   a different room/seed. - Probably okay not to do this, I only had to in early stages of testing but now it should be solid.
 
 3. **Load the connector.** With Kirby standing in that first stage, open BizHawk's
    **Lua Console** (Tools → Lua Console) and load **`KirbySqueakSquad_Connector.lua`**.
@@ -107,6 +107,7 @@ load before you connect the client.
   Handy because the in-game collection fills with a delay, so this is the quick way
   to see what's actually arrived.
 - **`/kss`** — prints the bridge file paths, for troubleshooting.
+- **`/chests`** - this will show how many chests you have opened in the game if you are doing the chests/Daroach goal.
 
 Keep BizHawk (with the connector running) and the client both open while you play.
 
@@ -142,11 +143,6 @@ Keep BizHawk (with the connector running) and the client both open while you pla
   opening the collection screen (and a few other menus) repaints Kirby from his saved
   color. The tint comes back the next time you're in a stage. Spray paints can't
   override it while it's enforced.
-- **Key / Star Seal chests can gray out.** The game opens EX stages and Secret Sea by
-  reading these 12 collectibles directly, so their bits are set the instant you
-  receive them. If you receive a key or seal **before** opening its own chest, that
-  chest comes up gray and won't send its check. This is the only masking left (12
-  chests, and only in that ordering) and is unavoidable without ROM patching.
 - **Collection fills gradually**, not the instant items arrive — a received
   collectible appears once you've opened its chest. This is deliberate (it's what
   keeps non-key chests from graying out).
