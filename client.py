@@ -44,7 +44,8 @@ TEMP = os.environ.get("TEMP") or tempfile.gettempdir()
 CHECKS_FILE = os.path.join(TEMP, "kss_checks.txt")
 ITEMS_FILE  = os.path.join(TEMP, "kss_items.txt")
 GOAL_FILE   = os.path.join(TEMP, "kss_goal.txt")
-DEATH_OUT_FILE = os.path.join(TEMP, "kss_death_out.txt")  # connector -> here: Kirby died (send-only)
+DEATH_OUT_FILE = os.path.join(TEMP, "kss_death_out.txt")  # connector -> here: Kirby died (send)
+DEATH_IN_FILE  = os.path.join(TEMP, "kss_death_in.txt")   # here -> connector: remote death (receive)
 COLOR_FILE     = os.path.join(TEMP, "kss_color.txt")      # here -> connector: starting color index
 
 
@@ -97,14 +98,21 @@ class KSSContext(CommonContext):
         self.goal_count = 70
         self.death_link_on = False
         self._last_death_out = None
+        self._death_in_n = 0
         try:
             open(ITEMS_FILE, "w").close()
         except OSError:
             pass
 
     def on_deathlink(self, data):
-        # Death link is SEND-ONLY: we broadcast our own deaths but do not apply incoming
-        # ones (KSS can't be killed safely via RAM). Swallow the remote death quietly.
+        # a remote death arrived: tell the connector to kill Kirby (it applies the
+        # in-place death-commit cluster so Kirby dies normally).
+        try:
+            self._death_in_n += 1
+            with open(DEATH_IN_FILE, "w", encoding="utf-8") as f:
+                f.write(str(self._death_in_n))
+        except OSError:
+            pass
         super().on_deathlink(data)
 
     async def server_auth(self, password_requested: bool = False):
