@@ -1,6 +1,6 @@
 Make sure to use the newest release!
 
-Disclaimer: I do not have programming experience and created this Archipelago experience with AI. Please let me know of any issues or suggestions on Discord!
+Disclaimer: I do not have programming experience and created this Archipelago experience with AI. Please let me know of any issues or suggestions on Discord! Still have to go through and make this more human but here is what the robot laid out:
 
 # Kirby: Squeak Squad — Archipelago — How to Play
 
@@ -27,7 +27,7 @@ that ships in the same release as the apworld.
 ## One-time install
 
 1. Drop **`kirby_squeak_squad.apworld`** into Archipelago's `custom_worlds` folder
-   (replace any older copy).
+   (replace any older copy). - Or just double click to install
 2. Launch the Archipelago Launcher. You should see a **"Kirby Squeak Squad Client"**
    button with the Kirby icon. That confirms the apworld is installed.
 
@@ -107,6 +107,7 @@ load before you connect the client.
   Handy because the in-game collection fills with a delay, so this is the quick way
   to see what's actually arrived.
 - **`/kss`** — prints the bridge file paths, for troubleshooting.
+- **`/chests`** - This will show the amount of in-game chests you've opened for the chests/Daroach goal
 
 Keep BizHawk (with the connector running) and the client both open while you play.
 
@@ -145,11 +146,6 @@ Keep BizHawk (with the connector running) and the client both open while you pla
   opening the collection screen (and a few other menus) repaints Kirby from his saved
   color. The tint comes back the next time you're in a stage. Spray paints can't
   override it while it's enforced.
-- **Key / Star Seal chests can gray out.** The game opens EX stages and Secret Sea by
-  reading these 12 collectibles directly, so their bits are set the instant you
-  receive them. If you receive a key or seal **before** opening its own chest, that
-  chest comes up gray and won't send its check. This is the only masking left (12
-  chests, and only in that ordering) and is unavoidable without ROM patching.
 - **Collection fills gradually**, not the instant items arrive — a received
   collectible appears once you've opened its chest. This is deliberate (it's what
   keeps non-key chests from graying out).
