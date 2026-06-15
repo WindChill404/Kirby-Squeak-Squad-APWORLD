@@ -1,12 +1,17 @@
--- KirbySqueakSquad_Connector.lua  (v21 - stable: live-color revert; death link send-only)
+-- KirbySqueakSquad_Connector.lua  (v22 - death link receive; vitality health-growth + crash-fix; weak food 1/9)
 --
---   New in v21 (stable build):
+--   New in v22:
+--   * DeathLink RECEIVE works: an incoming death applies the captured in-place death-commit
+--     cluster (HP=0 + DEATH_FLAGS) so Kirby dies normally where he stands. Full send+receive.
+--   * Vitality halves: max HP is now driven by halves received (36 + 4 per completed heart);
+--     the bits are never kept in-level, which fixes the heart-complete animation CRASH.
+--   * Weak foods heal 1/9 (was 1/12).
+--
+--   From v21:
 --   * Color: reverted to the LIVE render byte (0x0226189C). Safe, cosmetic, and only
 --     reverts on screens the game repaints (e.g. the collection screen), reapplying on
 --     the next gameplay frame. The save-byte / spray approaches are gone.
---   * DeathLink is SEND-ONLY: zeroing HP does not kill Kirby (leaves a crash-prone 0-HP
---     state) and forcing the death state blocks the real sequence, so incoming deaths
---     are not applied. Outgoing deaths still broadcast normally.
+--     (DeathLink became full send+receive in v22, above.)
 --
 --   From v19:
 --   * Random starting spray: grants the spray collectible bit directly from slot_data
@@ -62,7 +67,7 @@
 --     1st copy lets you USE the base ability; 2nd copy gives the UPGRADED version.
 --   * Ability-acquired checks: first time you legitimately hold a received
 --     ability, an acquired-ability check (idx 400+) is sent.
---   * Weak foods (Hamburger/Nikuman/Omelet/Rice Ball/Pudding) heal 1/12 each.
+--   * Weak foods (Hamburger/Nikuman/Omelet/Rice Ball/Pudding) heal 1/9 each.
 --
 --   Kept from v8.5: fractional heals; deferred collectible granting for full
 --   collection; clear-vanilla; stage clears; goal 119.
@@ -84,11 +89,27 @@ local TEMP = os.getenv("TEMP") or "C:\\Temp"
 local CHECKS_FILE = TEMP .. "\\kss_checks.txt"
 local ITEMS_FILE  = TEMP .. "\\kss_items.txt"
 local GOAL_FILE   = TEMP .. "\\kss_goal.txt"
-local DEATH_OUT   = TEMP .. "\\kss_death_out.txt"  -- connector -> client: Kirby died (send-only)
+local DEATH_OUT   = TEMP .. "\\kss_death_out.txt"  -- connector -> client: Kirby died (send)
+local DEATH_IN    = TEMP .. "\\kss_death_in.txt"   -- client -> connector: remote death (receive)
 local COLOR_FILE  = TEMP .. "\\kss_color.txt"      -- client -> connector: starting color index
 local STATE_ADDR  = 0x02255740                     -- gamestate; 0x2e = Kirby Dead
 local COLOR_ADDR  = 0x0226189C                     -- LIVE Kirby color (render byte; safe to write)
 local NUM_COLORS  = 19
+
+-- DeathLink RECEIVE: the exact in-place death-commit cluster the game sets when it kills
+-- Kirby (verified by capture). Writing HP=0 plus these (relative to the Kirby struct base)
+-- makes the game run its normal death where Kirby stands. Held for a few frames so it takes.
+local DEATH_FLAGS = {
+    {0x018,4}, {0x070,0}, {0x08C,0}, {0x094,0}, {0x09C,0},
+    {0x0A0,-697}, {0x0B4,11}, {0x0E4,3}, {0x100,21}, {0x128,0}, {0x164,0},
+}
+
+-- Vitality halves: collectible bits whose HEALTH upgrade the game does NOT derive from the
+-- bitfield. We drive max HP ourselves from how many halves were received, and we never let
+-- these bits persist in-level (so the game's heart-complete animation can't crash on a
+-- mismatched count). maxHP = BASE_MAXHP + HEART_HP * floor(halves / 2).
+local VITALITY = {[6]=true,[7]=true,[9]=true,[10]=true,[11]=true,[12]=true,[13]=true,[117]=true}
+local BASE_MAXHP, HEART_HP = 36, 4
 
 local NAME_TO_BIT = {
     ["Star seal 1"] = 0,
@@ -264,12 +285,12 @@ local FILLER = {
     ["Energy Drink"] = {heal = 1/3},     -- third
     ["Cherries"]     = {heal = 1/6},     -- sixth
     ["1-Up"]         = {life = 1},
-    -- weak foods: bottom of the mixing tree (two of them = one cherry), 1/12 each
-    ["Hamburger"]    = {heal = 1/12},
-    ["Nikuman"]      = {heal = 1/12},
-    ["Omelet"]       = {heal = 1/12},
-    ["Rice Ball"]    = {heal = 1/12},
-    ["Pudding"]      = {heal = 1/12},
+    -- weak foods: bottom of the mixing tree, 1/9 each
+    ["Hamburger"]    = {heal = 1/9},
+    ["Nikuman"]      = {heal = 1/9},
+    ["Omelet"]       = {heal = 1/9},
+    ["Rice Ball"]    = {heal = 1/9},
+    ["Pudding"]      = {heal = 1/9},
 }
 
 -- Kirby-flavored pop-ups -----------------------------------------------------
@@ -307,7 +328,7 @@ end
 local function rb(abs) local ok,v=pcall(mainmemory.read_u8, abs-RAM); return ok and (v or 0) or 0 end
 local function wb(abs,val) mainmemory.write_u8(abs-RAM, val % 256) end
 local function ru32(abs) local ok,v=pcall(mainmemory.read_u32_le, abs-RAM); return ok and (v or 0) or 0 end
-local function wu32(abs,val) pcall(mainmemory.write_u32_le, abs-RAM, val) end
+local function wu32(abs,val) pcall(mainmemory.write_u32_le, abs-RAM, val % 0x100000000) end
 local function read_coll() local f={} for i=0,14 do f[i]=rb(COLL+i) end return f end
 local function bit_set(f,idx) local by=math.floor(idx/8); local bi=idx%8; return (math.floor((f[by] or 0)/(2^bi))%2)==1 end
 local function byte_bit(v,bi) return (math.floor(v/(2^bi))%2)==1 end
@@ -349,7 +370,14 @@ local goal_sent = false
 -- DeathLink state
 local death_out_n = 0
 local prev_state = rb(STATE_ADDR)
+local last_death_in = ""
+do local df=io.open(DEATH_IN,"r"); if df then last_death_in=(df:read("*l") or ""); df:close() end end
+local kill_frames = 0       -- per-frame death-commit application remaining (dense, short)
+local suppress_frames = 0   -- ticks to not echo our own forced death
 local color_target = nil
+-- Vitality health: how many halves received -> drives max HP
+local vit_received = 0
+local vit_heal = false
 os.remove(DEATH_OUT)
 local received_prog = {}   -- ability name -> count of Progressive copies received (0/1/2)
 local acquired_sent = {}   -- ability name -> first-use check already sent
@@ -396,17 +424,50 @@ local function apply_filler()
 end
 
 local function tick()
-    -- DeathLink (SEND-ONLY): when Kirby dies, the gamestate flips to 0x2e. We notify the
-    -- client, which broadcasts the death. Incoming deaths are NOT applied: zeroing HP does
-    -- not trigger KSS's death (it just strands Kirby at 0 HP in a crash-prone state), and
-    -- forcing the state blocks the real death sequence. So this is send-only by design.
+    -- DeathLink SEND: when Kirby dies, gamestate flips to 0x2e -> tell the client.
+    -- DeathLink RECEIVE: an incoming death writes kss_death_in.txt; we apply the in-place
+    -- death-commit cluster (HP=0 + DEATH_FLAGS), held briefly, so the game runs its normal
+    -- death where Kirby stands. suppress_frames stops us echoing our own forced death.
     local st = rb(STATE_ADDR)
-    if st == 0x2e and prev_state ~= 0x2e then
+    if st == 0x2e and prev_state ~= 0x2e and suppress_frames == 0 then
         death_out_n = death_out_n + 1
         local f=io.open(DEATH_OUT,"w"); if f then f:write(tostring(death_out_n)); f:close() end
         print("DeathLink: Kirby died -> notified client")
     end
     prev_state = st
+    if suppress_frames > 0 then suppress_frames = suppress_frames - 1 end
+
+    do
+        local f=io.open(DEATH_IN,"r")
+        if f then
+            local v=(f:read("*l") or ""); f:close()
+            if v~="" and v~=last_death_in then
+                last_death_in=v
+                kill_frames = 80             -- ~20 frames of cluster, then hold HP=0 briefly
+                suppress_frames = 35
+                msg("(x_x)  DeathLink received!")
+                print("DeathLink: received -> applying death-commit cluster")
+            end
+        end
+    end
+    -- (death-commit cluster is applied per-frame in the frame handler so it's dense and
+    -- brief: a long sparse re-apply re-triggers the hit sound and freezes the squish.)
+
+    -- Vitality health: keep max HP in sync with halves received. Skip transient states
+    -- (e.g. invincibility / ability grab read maxHP ~100) so we don't fight them.
+    do
+        local base=kirby_base()
+        if base then
+            local target = BASE_MAXHP + HEART_HP * math.floor(vit_received / 2)
+            local mx = ru32(base + MAXHP_OFF)
+            if mx >= 30 and mx <= 60 and mx ~= target then
+                wu32(base + MAXHP_OFF, target)
+                if vit_heal then
+                    wu32(base + HP_OFF, target); vit_heal = false   -- top up on a fresh grant
+                end
+            end
+        end
+    end
 
     -- Starting color: client drops kss_color.txt with an index once per seed. We hold the
     -- LIVE render byte to that color while Kirby is in a level. This is cosmetic and safe.
@@ -440,7 +501,10 @@ local function tick()
             local b=NAME_TO_BIT[name]
             if b then
                 received_bits[b]=true
-                if KEY_SEAL[name] then grant_and_claim(b)
+                if VITALITY[b] then
+                    vit_received = vit_received + 1   -- grows max HP; bit NOT set (crash-safe)
+                    vit_heal = true
+                elseif KEY_SEAL[name] then grant_and_claim(b)
                 elseif opened_bits[b] then set_bit(b); prev_set_bit(b) end
                 msg(item_flavor(name))
             else
@@ -483,6 +547,11 @@ local function tick()
                 if not goal_sent then goal_sent=true
                     local gf=io.open(GOAL_FILE,"w"); if gf then gf:write("1"); gf:close() end
                     print("GOAL reached (cake)!") end
+            elseif VITALITY[i] then
+                -- never let a vitality bit persist in-level: keeping it would let the game's
+                -- heart-complete animation read an inflated count and crash. Check already
+                -- sent above; health is driven by vit_received instead.
+                clear_bit(i); cur[math.floor(i/8)]=rb(COLL+math.floor(i/8))
             elseif received_bits[i] then
                 -- received: keep it in the collection
             else
@@ -509,12 +578,30 @@ local function tick()
 end
 
 local n=0
-event.onframestart(function() n=n+1; if n%POLL~=0 then return end; tick() end, "kss_connector")
+event.onframestart(function()
+    n=n+1
+    -- DeathLink RECEIVE applied here (per-frame) so it's dense and brief. First ~20 frames
+    -- write the full commit cluster to start the death; the rest just hold HP=0 silently so
+    -- the game's death animation can play out WITHOUT being reset (which caused the repeated
+    -- hit sound and the frozen squish). When not in a level, it waits for the next stage.
+    if kill_frames > 0 then
+        local base=kirby_base()
+        if base then
+            wu32(base+HP_OFF, 0)
+            if kill_frames > 60 then
+                for _,p in ipairs(DEATH_FLAGS) do wu32(base+p[1], p[2]) end
+            end
+            kill_frames = kill_frames - 1
+        end
+    end
+    if n%POLL~=0 then return end
+    tick()
+end, "kss_connector")
 
 local okc=pcall(rb,COLL)
 if okc then
     local f=read_coll(); local c=0
     for i=0,NUM_BITS-1 do if bit_set(f,i) then c=c+1 end end
-    print("KSS connector ready (v21). "..c.." chest locations already collected.")
+    print("KSS connector ready (v22). "..c.." chest locations already collected.")
     msg("<(^-^<) Kirby connector ready! let's find some treasure!")
 else print("ERROR reading collectibles field"); msg("x_x  connector: RAM error") end
