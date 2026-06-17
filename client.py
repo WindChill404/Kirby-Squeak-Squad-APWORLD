@@ -47,6 +47,7 @@ GOAL_FILE   = os.path.join(TEMP, "kss_goal.txt")
 DEATH_OUT_FILE = os.path.join(TEMP, "kss_death_out.txt")  # connector -> here: Kirby died (send)
 DEATH_IN_FILE  = os.path.join(TEMP, "kss_death_in.txt")   # here -> connector: remote death (receive)
 COLOR_FILE     = os.path.join(TEMP, "kss_color.txt")      # here -> connector: starting color index
+CHECKED_FILE   = os.path.join(TEMP, "kss_checked.txt")    # here -> connector: authoritative checked-chest bits (overlay)
 
 
 class KSSCommandProcessor(ClientCommandProcessor):
@@ -224,6 +225,17 @@ async def game_watcher(ctx: KSSContext):
             if locs:
                 await ctx.send_msgs([{"cmd": "LocationChecks", "locations": locs}])
             ctx._write_items()
+            # authoritative opened-chest list for the in-game overlay: write the bit indices
+            # of every CHEST location the server says is checked (survives reloads, and covers
+            # chests opened before the overlay/this session existed). Overwrite each poll.
+            try:
+                checked = getattr(ctx, "checked_locations", set()) or set()
+                bits = sorted(loc - LOCATION_BASE_ID for loc in checked
+                              if CHEST_LOC_LO <= loc <= CHEST_LOC_HI)
+                with open(CHECKED_FILE, "w", encoding="utf-8") as f:
+                    f.write("\n".join(str(b) for b in bits))
+            except OSError:
+                pass
             # death link: forward a local death to the server
             if ctx.death_link_on:
                 try:

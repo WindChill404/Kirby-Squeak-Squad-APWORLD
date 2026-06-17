@@ -1,3 +1,17 @@
+-- KirbySqueakSquad_Connector.lua  (v29 - adds the in-game opened-chest overlay; v28 overflow fix kept)
+--
+--   New in v29:
+--   * IN-GAME OPENED-CHEST OVERLAY. For the stage you're on, draws a checklist of its chests
+--     marking which you've already opened (sent as AP checks), since the game's own level-map
+--     icons can't show this (they ride the per-stage counter v28 decrements). "Opened" is the
+--     union of this session's sent checks plus the server's authoritative list, which the client
+--     now writes to kss_checked.txt -- so it survives reloads and includes chests opened earlier.
+--     Toggle it on/off live with the OVERLAY_TOGGLE_KEY (default "T"); default-on is configurable.
+--     Pure display: it only reads RAM + that file and calls gui.text, never writes game memory.
+--
+--   New in v28:
+--   * SURGICAL re-collect overflow fix (see below).
+--
 -- KirbySqueakSquad_Connector.lua  (v28 - SURGICAL re-collect overflow fix; masking + watchdog gating)
 --
 --   New in v28:
@@ -141,6 +155,12 @@ local GOAL_FILE   = TEMP .. "\\kss_goal.txt"
 local DEATH_OUT   = TEMP .. "\\kss_death_out.txt"  -- connector -> client: Kirby died (send)
 local DEATH_IN    = TEMP .. "\\kss_death_in.txt"   -- client -> connector: remote death (receive)
 local COLOR_FILE  = TEMP .. "\\kss_color.txt"      -- client -> connector: starting color index
+local CHECKED_FILE = TEMP .. "\\kss_checked.txt"   -- client -> connector: authoritative checked-chest list (for the overlay)
+-- ---- in-game opened-chest overlay (Option B) ----
+local OVERLAY_DEFAULT_ON = true    -- is the overlay showing when you launch?
+local OVERLAY_TOGGLE_KEY = "T"     -- press this key to show/hide the overlay live.
+                                   -- If it clashes with an EmuHawk hotkey, change it (any key
+                                   -- name works, e.g. "Y", "Tab", "F8") or unbind it in EmuHawk.
 local STATE_ADDR  = 0x02255740                     -- gamestate; 0x2e = Kirby Dead
 local COLOR_ADDR  = 0x0226189C                     -- LIVE Kirby color (render byte; safe to write)
 local NUM_COLORS  = 19
@@ -673,9 +693,136 @@ local function tick()
     end
 end
 
+-- ===================== IN-GAME OPENED-CHEST OVERLAY (Option B) =====================
+-- For the stage you're currently on, lists which of its chests you've already opened
+-- (sent as AP checks). The game's own level-map icons can't show this -- they're driven
+-- by the per-stage counter we decrement to stop the re-collect overflow -- so this draws
+-- an independent checklist instead. "Opened" is the union of: chests THIS session has
+-- sent, plus the authoritative list the client writes to kss_checked.txt from the server
+-- (so it survives reloads and shows chests opened before the overlay existed). The stage
+-- key is world*10+substage -- the same layout as the counter -- and substage = in-game
+-- stage-1 (so 1-5 -> 0-4, EX -> 5, Boss -> 6). Press OVERLAY_TOGGLE_KEY to show/hide.
+
+local CHEST_BY_STAGE = {
+  [1] = { {52,"Beginning Notes"} },
+  [2] = { {5,"Sound player"}, {28,"Fire scroll"} },
+  [3] = { {14,"Prism Plains key"}, {72,"Green"}, {100,"Graphic piece_1"} },
+  [4] = { {88,"Copy palette 1"} },
+  [5] = { {6,"Vitality half_1"}, {113,"Graphic piece_2"} },
+  [6] = { {62,"King DeDeDe badge"} },
+  [10] = { {0,"Star seal 1"}, {48,"Animal scroll"}, {58,"Kirby's Sounds"} },
+  [11] = { {21,"Ghost medal_1"}, {85,"Citrus"} },
+  [12] = { {39,"Wheel scroll"}, {92,"Copy palette 2"}, {111,"Graphic piece_3"} },
+  [13] = { {36,"Cutter scroll"} },
+  [14] = { {15,"Nature Notch key"}, {31,"Beam scroll"}, {107,"Graphic piece_4"} },
+  [15] = { {7,"Vitality half_2"}, {93,"Secret Map_1"}, {109,"Graphic piece_5"} },
+  [16] = { {63,"Mrs Moley badge"} },
+  [20] = { {30,"Spark scroll"}, {77,"Grape"}, {114,"Graphic piece_6"} },
+  [21] = { {1,"Star seal 2"}, {56,"Familiar Notes"} },
+  [22] = { {22,"Ghost medal_2"}, {94,"Secret Map_2"}, {106,"Graphic piece_7"} },
+  [23] = { {16,"Cushy Cloud key"}, {40,"HiJump scroll"}, {87,"Lavender"} },
+  [24] = { {32,"Tornado scroll"} },
+  [25] = { {8,"Orange"}, {79,"Graphic piece_8"}, {117,"Vitality half_3"} },
+  [26] = { {64,"Mecha-Kracko badge"} },
+  [30] = { {49,"Bubble scroll"}, {83,"Shadow"}, {103,"Graphic piece_9"} },
+  [31] = { {2,"Star seal 3"}, {70,"Yellow"} },
+  [32] = { {9,"Vitality half_4"}, {50,"Metal scroll"}, {90,"Copy palette 3"} },
+  [33] = { {17,"Jam Jungle key"}, {95,"Secret Map_3"}, {118,"Graphic piece_10"} },
+  [34] = { {37,"Laser scroll"} },
+  [35] = { {23,"Ghost medal_3"}, {29,"Ice scroll"}, {51,"Party Notes"} },
+  [36] = { {65,"Yadgaine badge"} },
+  [40] = { {3,"Star seal 4"}, {33,"Enemy Sounds"}, {59,"Parasol scroll"} },
+  [41] = { {34,"Hammer scroll"}, {84,"Ivory"}, {115,"Graphic piece_11"} },
+  [42] = { {10,"Vitality half_5"}, {44,"Ninja scroll"}, {105,"Graphic piece_12"} },
+  [43] = { {18,"Vocal Volcano key"}, {71,"Red"}, {96,"Secret Map_4"} },
+  [45] = { {24,"Ghost medal_4"}, {42,"Copy palette 4"}, {89,"Sleep scroll"} },
+  [46] = { {66,"Bohboh badge"} },
+  [50] = { {43,"Sword scroll"}, {60,"Graphic piece_13"}, {116,"Sound Effects"} },
+  [51] = { {4,"Star seal 5"}, {73,"Snow"} },
+  [52] = { {11,"Vitality half_6"}, {45,"Fighter scroll"}, {110,"Graphic piece_14"} },
+  [53] = { {19,"Ice Island key"}, {53,"Happy Notes"}, {82,"Chalk"} },
+  [54] = { {35,"Cupid scroll"}, {91,"Copy palette 5"}, {102,"Graphic piece_15"} },
+  [55] = { {25,"Ghost medal_5"}, {81,"Cherry"}, {97,"Secret Map_5"} },
+  [56] = { {67,"Daroach badge"} },
+  [60] = { {46,"Throw scroll"}, {61,"Secret Sounds"}, {86,"White"} },
+  [61] = { {26,"Ghost medal_6"}, {76,"Sapphire"}, {108,"Graphic piece_16"} },
+  [62] = { {38,"Bomb scroll"}, {54,"Graphic piece_17"}, {101,"Spunky Notes"} },
+  [63] = { {20,"Secret Sea key"}, {47,"Magic scroll"}, {75,"Ocean"} },
+  [64] = { {80,"Chocolate"} },
+  [65] = { {12,"Vitality half_7"}, {98,"Secret Map_6"}, {104,"Graphic piece_18"} },
+  [66] = { {68,"Meta Knight badge"} },
+  [70] = { {41,"UFO scroll"}, {55,"Battle Notes"}, {112,"Graphic piece_19"} },
+  [71] = { {27,"Ghost medal_7"}, {78,"Emerald"}, {99,"Secret Map_7"} },
+  [72] = { {13,"Vitality half_8"}, {57,"Secret Notes"}, {74,"Carbon"} },
+  [76] = { {69,"Dark Nebula badge"} },
+}
+
+local overlay_on = OVERLAY_DEFAULT_ON
+local toggle_prev = false
+local function update_overlay_toggle()
+    local ok, keys = pcall(input.get)
+    if not ok or not keys then return end
+    local down = keys[OVERLAY_TOGGLE_KEY] and true or false
+    if down and not toggle_prev then
+        overlay_on = not overlay_on
+        msg(overlay_on and "Chest overlay: ON" or "Chest overlay: OFF")
+    end
+    toggle_prev = down
+end
+
+local checked_file = {}            -- bit -> true, from kss_checked.txt (server-authoritative)
+local function reload_checked()
+    local t = {}
+    local f = io.open(CHECKED_FILE, "r")
+    if f then
+        for line in f:lines() do
+            local b = tonumber(line)
+            if b then t[b] = true end
+        end
+        f:close()
+    end
+    checked_file = t
+end
+
+local function is_opened(bit)
+    return (opened_bits[bit] or checked_file[bit]) and true or false
+end
+
+local function stage_label(w, s)
+    local wn = WORLD_NAMES[w+1] or ("World "..(w+1))
+    local sn
+    if s <= 4 then sn = tostring(s+1)
+    elseif s == 5 then sn = "EX"
+    elseif s == 6 then sn = "Boss"
+    else sn = "?" end
+    return string.format("%d-%s %s", w+1, sn, wn)
+end
+
+local function draw_overlay()
+    if not overlay_on then return end
+    local w, s = ru32(WORLD_ADDR), ru32(SUBSTAGE_ADDR)
+    if w > 7 or s > 9 then return end
+    local list = CHEST_BY_STAGE[w*10 + s]
+    if not list then return end
+    local nopen = 0
+    for _,c in ipairs(list) do if is_opened(c[1]) then nopen = nopen + 1 end end
+    local x, y = 4, 4
+    pcall(gui.text, x, y, string.format("[KSS] %s  (%d/%d opened)", stage_label(w,s), nopen, #list), 0xFFFFFFFF)
+    y = y + 16
+    for _,c in ipairs(list) do
+        local op = is_opened(c[1])
+        pcall(gui.text, x, y, (op and "[x] " or "[ ] ")..c[2], op and 0xFF66FF66 or 0xFFD8D8D8)
+        y = y + 14
+    end
+end
+-- ================================================================================
+
 local n=0
 event.onframestart(function()
     n=n+1
+    update_overlay_toggle()
+    if n % 30 == 0 then reload_checked() end   -- refresh server-authoritative opened list ~2x/sec
+    draw_overlay()                             -- redraw every frame (gui layer clears each frame)
     -- DeathLink RECEIVE applied here (per-frame) so it's dense and brief. First ~20 frames
     -- write the full commit cluster to start the death; the rest just hold HP=0 silently so
     -- the game's death animation can play out WITHOUT being reset (which caused the repeated
@@ -698,6 +845,6 @@ local okc=pcall(rb,COLL)
 if okc then
     local f=read_coll(); local c=0
     for i=0,NUM_BITS-1 do if bit_set(f,i) then c=c+1 end end
-    print("KSS connector ready (v28). "..c.." chest locations already collected.")
+    print("KSS connector ready (v29). "..c.." chest locations already collected.")
     msg("<(^-^<) Kirby connector ready! let's find some treasure!")
 else print("ERROR reading collectibles field"); msg("x_x  connector: RAM error") end

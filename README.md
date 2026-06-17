@@ -1,6 +1,6 @@
 Make sure to use the newest release!
 
-Disclaimer: I do not have programming experience and created this Archipelago experience with AI. Please let me know of any issues or suggestions on Discord! Still have to go through and make this more human but here is what the robot laid out:
+Disclaimer: I do not have programming experience and created this Archipelago experience with AI. Please let me know of any issues or suggestions on Discord!
 
 # Kirby: Squeak Squad — Archipelago — How to Play
 
@@ -27,7 +27,7 @@ that ships in the same release as the apworld.
 ## One-time install
 
 1. Drop **`kirby_squeak_squad.apworld`** into Archipelago's `custom_worlds` folder
-   (replace any older copy). - Or just double click to install
+   (replace any older copy).
 2. Launch the Archipelago Launcher. You should see a **"Kirby Squeak Squad Client"**
    button with the Kirby icon. That confirms the apworld is installed.
 
@@ -90,7 +90,7 @@ load before you connect the client.
 
 3. **Load the connector.** With Kirby standing in that first stage, open BizHawk's
    **Lua Console** (Tools → Lua Console) and load **`KirbySqueakSquad_Connector.lua`**.
-   It should print: `KSS connector ready (v28). 0 chest locations already collected.`
+   It should print: `KSS connector ready (v29). 0 chest locations already collected.`
    The `0` is your green light. A different number means you're on an old or polluted
    save — start a fresh file and reload.
 
@@ -107,7 +107,6 @@ load before you connect the client.
   Handy because the in-game collection fills with a delay, so this is the quick way
   to see what's actually arrived.
 - **`/kss`** — prints the bridge file paths, for troubleshooting.
-- **`/chests`** - This will show the amount of in-game chests you've opened for the chests/Daroach goal
 
 Keep BizHawk (with the connector running) and the client both open while you play.
 
@@ -137,6 +136,23 @@ Keep BizHawk (with the connector running) and the client both open while you pla
 
 ---
 
+## Tracking what you've opened
+
+Because opened chests are recorded by the connector instead of being left in your save,
+the level-map chest icons don't fill in. Two ways to see your progress:
+
+- **Built-in overlay.** While you're on a stage, a checklist of that stage's chests appears
+  top-left, marking which you've opened (e.g. `[KSS] 2-3 Nature Notch (2/3 opened)`). Press
+  **T** to toggle it. Change `OVERLAY_TOGGLE_KEY` in the connector if T conflicts, or set
+  `OVERLAY_DEFAULT_ON = false` to start hidden. It reads the server's authoritative list
+  (via `kss_checked.txt`), so it's correct across reloads, and it never writes game memory.
+- **Universal Tracker** (optional, full route view). It works with this world: put its
+  `tracker` apworld in `custom_worlds`, keep your slot YAML in `Players`, and it adds a
+  tracker tab to the client. Download:
+  <https://github.com/FarisTheAncient/Archipelago/releases>.
+
+---
+
 ## Known quirks (not bugs)
 
 - **Incoming deaths apply when you're in a stage.** Death Link is full send and receive,
@@ -146,6 +162,19 @@ Keep BizHawk (with the connector running) and the client both open while you pla
   opening the collection screen (and a few other menus) repaints Kirby from his saved
   color. The tint comes back the next time you're in a stage. Spray paints can't
   override it while it's enforced.
+- **Key / Star Seal chests can gray out.** The game opens EX stages and Secret Sea by
+  reading these 12 collectibles directly, so the connector sets their bit the instant you
+  **receive** the key/seal — and at the same moment auto-sends that chest's check. So if a
+  key or seal arrives **before** you open its own chest, that chest shows up already-opened
+  (gray) when you reach it, but **its check was never lost.**
+- **Opened chests don't fill the level-map icons.** Every chest you open is recorded by the
+  connector rather than left set in your save (this is what keeps AP in control of the item
+  and what makes replays safe). The trade-off is that the game's own map icons stay empty —
+  use the built-in overlay (press **T**) or the Archipelago tracker to see what you've
+  opened. See "Tracking what you've opened" above.
+- **Replaying a cleared stage is safe.** Re-entering a stage and re-opening its chests is
+  fine now. Earlier builds could white-screen on the results screen once a stage's chest
+  count was pushed past its max on a replay; the connector now prevents that.
 - **Collection fills gradually**, not the instant items arrive — a received
   collectible appears once you've opened its chest. This is deliberate (it's what
   keeps non-key chests from graying out).
@@ -165,7 +194,7 @@ Keep BizHawk (with the connector running) and the client both open while you pla
   in the client log; the lock uses received scrolls, not in-game pickups.
 - **Nothing sends when you open chests** → make sure the Lua console still shows the
   connector running and the client still says Connected.
-- **Received an item but nothing happened** → confirm the connector says **v21** and
+- **Received an item but nothing happened** → confirm the connector says **v29** and
   the client says Connected; some items (collectibles) only show after you open their
   chest.
 
