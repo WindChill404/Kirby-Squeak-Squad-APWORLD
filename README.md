@@ -1,6 +1,6 @@
 Make sure to use the newest release!
 
-Disclaimer: I do not have programming experience and created this Archipelago experience with AI. Please let me know of any issues or suggestions on Discord!
+Disclaimer: I do not have programming experience and created this Archipelago experience with AI. Please let me know of any issues or suggestions on Discord! Still working to make this sound more human, you'll see some of my anotations as you read.
 
 # Kirby: Squeak Squad — Archipelago — How to Play
 
@@ -27,9 +27,9 @@ that ships in the same release as the apworld.
 ## One-time install
 
 1. Drop **`kirby_squeak_squad.apworld`** into Archipelago's `custom_worlds` folder
-   (replace any older copy).
+   (replace any older copy). - You can also just double click it like normal
 2. Launch the Archipelago Launcher. You should see a **"Kirby Squeak Squad Client"**
-   button with the Kirby icon. That confirms the apworld is installed.
+   button with the Squeaker icon. That confirms the apworld is installed.
 
 ---
 
@@ -107,6 +107,7 @@ load before you connect the client.
   Handy because the in-game collection fills with a delay, so this is the quick way
   to see what's actually arrived.
 - **`/kss`** — prints the bridge file paths, for troubleshooting.
+- **`/chests`** - this will let you see the number of in-game chests you have opened for the chests/Daroach goal
 
 Keep BizHawk (with the connector running) and the client both open while you play.
 
@@ -149,7 +150,7 @@ the level-map chest icons don't fill in. Two ways to see your progress:
 - **Universal Tracker** (optional, full route view). It works with this world: put its
   `tracker` apworld in `custom_worlds`, keep your slot YAML in `Players`, and it adds a
   tracker tab to the client. Download:
-  <https://github.com/FarisTheAncient/Archipelago/releases>.
+  <https://github.com/FarisTheAncient/Archipelago/releases>. [Untested]
 
 ---
 
