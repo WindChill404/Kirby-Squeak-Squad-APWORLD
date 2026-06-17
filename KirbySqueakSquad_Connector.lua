@@ -1,4 +1,53 @@
--- KirbySqueakSquad_Connector.lua  (v22 - death link receive; vitality health-growth + crash-fix; weak food 1/9)
+-- KirbySqueakSquad_Connector.lua  (v28 - SURGICAL re-collect overflow fix; masking + watchdog gating)
+--
+--   New in v28:
+--   * RE-COLLECT OVERFLOW FIX, done right. Each stage has a one-byte "chests found" counter at
+--     0x02256030 + world*10 + substage (mapped via COUNTERMAP, confirmed across worlds 0/1/2). The
+--     game bumps it on every collection, even re-collecting the same masked chest on a replay, and
+--     once it passes the stage max (3/3) the results screen overflows -> white screen. Now, when the
+--     connector masks a chest, it decrements ONLY that one fenced byte by 1, undoing the bump, so a
+--     masked chest counts 0 and the total can't climb on replays. The write is hard-fenced to
+--     0x02256030..0x0225607F, so unlike v26's broad reset it can never reach the per-world clear
+--     masks (0x0225609A+) or stage-clear bytes (0x022560D8+) -- progression is untouched.
+--
+--   v27 (REVERTED v26): pulled v26's broad counter reset, which stomped progression data.
+--
+--   New in v26 (REVERTED in v27):
+--   * WHITE-SCREEN-ON-REPLAY FIX (the real one): every stage keeps a "chests found" counter
+--     (the 3/3 on the level-select), and the game increments it each time you collect a chest --
+--     even the SAME chest re-collected on a later run. Because masking clears the collectible bit,
+--     the game lets you re-collect a masked chest, so that counter climbed every replay and, once
+--     it passed the stage's max (e.g. a 4th collect in a 3-chest stage), the results screen
+--     overflowed and white-screened. Now, whenever the connector masks a chest, it also UNDOES the
+--     counter bump (restores that stage's count byte to its pre-collection value), so a masked
+--     chest contributes 0 and the count can never exceed the max no matter how many replays. Only
+--     the opened-counter sub-range is touched; stage-clear bytes are never altered. This is why the
+--     bug only ever hit on RE-ENTERING a stage, never on a first clear (you start at 0).
+--
+--   New in v25:
+--   * TRANSITION-HANG FIX (white screen stuck between chest-open and stage-select on a progression
+--     item): the ability watchdog is now gated to only drop an un-received ability while Kirby is
+--     IN a stage. Before, it ran during the out-of-stage chest-open transition too -- opening a
+--     scroll hands Kirby that ability mid get-sequence, and the watchdog zeroing the ability byte
+--     right then desynced the sequence and hung the white screen (the progression-item get-sequence
+--     outlasts the 40-frame drop delay, so it fired mid-sequence). Now matched to how vitality and
+--     color writes are already gated: connector touches the ability only during active gameplay.
+--     The lock is still fully enforced -- it drops the ability the instant Kirby is back in a stage.
+--     MASKTEST proved the masking itself is safe (save AND transition), so masking is unchanged.
+--
+--   New in v24:
+--   * Masking RESTORED for keys, star seals, and ability scrolls. Testing (a standalone MASKTEST
+--     plus the OPENDIFF save-footprint capture) proved that clearing a chest's collectible bit is
+--     save-safe even across the stage-exit save -- a masked chest just reads as an opened gray
+--     chest, which reloads fine. Keys/seals/scrolls have the identical footprint to a regular
+--     collectible, so they're masked normally again: AP keeps full control of those items, no
+--     vanilla leak, and Progressive Ability is fully intact. (The v23 "leave them vanilla" fix was
+--     a wrong turn -- the corruption a tester hit was NOT the masking.)
+--   * BOSS BADGES still left un-cleared (NO_CLEAR): a badge chest also writes a large world-
+--     progression block, so it needs the in-progress world-gating handling, not a plain bit-clear.
+--
+--   (v23 was: left keys/seals/scrolls/badges vanilla to dodge a suspected save-corruption that
+--    turned out not to be the masking. Superseded.)
 --
 --   New in v22:
 --   * DeathLink RECEIVE works: an incoming death applies the captured in-place death-commit
@@ -278,6 +327,21 @@ local ABILITY = {
 -- reverse lookup: 0x18C value -> ability name (only the 23 gated abilities)
 local VAL_TO_ABILITY = {}
 for nm,d in pairs(ABILITY) do VAL_TO_ABILITY[d.val]=nm end
+
+-- SAVE-SAFETY (v24): testing (MASKTEST + the OPENDIFF capture) showed that clearing a chest's
+-- collectible bit to mask it is SAVE-SAFE even across the stage-exit save -- a masked chest just
+-- looks like an opened gray chest, which the game reloads fine. Keys, seals, and ability scrolls
+-- have the exact same save footprint as a regular collectible (just their bit + an opened byte),
+-- so they are masked normally again -- this keeps AP in full control of those items with NO leak
+-- and Progressive Ability fully intact. (v23 had wrongly left them vanilla; the corruption a tester
+-- hit was NOT the masking.)
+--
+-- The ONE exception is BOSS BADGES: opening a badge chest also writes a large world-progression
+-- block (the next-world unlock), so clearing just the badge bit would orphan that. Badge handling
+-- is part of the in-progress in-game world-gating work, so badges stay un-cleared for now.
+local NO_CLEAR = {}
+for b=62,69 do NO_CLEAR[b]=true end                                                         -- boss badges only
+
 -- heal = fraction of MAX health restored; life = extra lives
 local FILLER = {
     ["Maxim Tomato"] = {heal = 1.0},     -- full
@@ -333,6 +397,25 @@ local function read_coll() local f={} for i=0,14 do f[i]=rb(COLL+i) end return f
 local function bit_set(f,idx) local by=math.floor(idx/8); local bi=idx%8; return (math.floor((f[by] or 0)/(2^bi))%2)==1 end
 local function byte_bit(v,bi) return (math.floor(v/(2^bi))%2)==1 end
 local function gate_sum() local s=0 for a=GATE_LO,GATE_HI do s=(s+rb(a))%1000000007 end return s end
+
+-- Per-stage "chests found" counter (the 3/3 on level-select). One byte per stage, laid out as
+--   byte = 0x02256030 + world*10 + substage     (world/substage are the raw 0-indexed RAM values).
+-- Confirmed across worlds 0/1/2 via the COUNTERMAP capture. Every counter sits in
+-- 0x02256030..0x0225607F, safely below the per-world clear masks (0x0225609A+) and stage-clear
+-- bytes (0x022560D8+). When we MASK a chest the game bumps this counter; we undo exactly that one
+-- byte so a masked chest counts 0 and re-collecting it on replays can't climb to the stage max
+-- (which overflows -> white screen). Targeting one fenced byte means we never touch progression.
+local COUNTER_BASE = 0x02256030
+local WORLD_ADDR, SUBSTAGE_ADDR = 0x02260BF4, 0x02260BF8
+local COUNTER_MIN, COUNTER_MAX  = 0x02256030, 0x0225607F   -- hard fence: never write outside this
+local function dec_stage_counter()
+    local w, s = ru32(WORLD_ADDR), ru32(SUBSTAGE_ADDR)
+    if w > 7 or s > 9 then return end                       -- not a real stage index -> do nothing
+    local a = COUNTER_BASE + w*10 + s
+    if a < COUNTER_MIN or a > COUNTER_MAX then return end    -- fence: stay clear of progression data
+    local c = rb(a)
+    if c > 0 then wb(a, c-1) end                             -- undo this masked chest's +1 bump
+end
 local function set_bit(idx) local by=math.floor(idx/8); local bi=idx%8; local a=COLL+by; local c=rb(a); local m=2^bi
     if (math.floor(c/m)%2)==0 then wb(a,c+m) end end
 local function clear_bit(idx) local by=math.floor(idx/8); local bi=idx%8; local a=COLL+by; local c=rb(a); local m=2^bi
@@ -524,8 +607,17 @@ local function tick()
     local av=rb(ABILITY_ADDR)
     local abname=VAL_TO_ABILITY[av]
     if abname and (received_prog[abname] or 0) < 1 then
-        illegal_frames=illegal_frames+POLL
-        if illegal_frames>=ABILITY_DELAY then wb(ABILITY_ADDR,0); illegal_frames=0 end
+        if kirby_base() then
+            illegal_frames=illegal_frames+POLL
+            -- Only drop while IN a stage. NEVER during the out-of-stage chest-open transition:
+            -- opening a scroll hands Kirby that ability mid get-sequence, and zeroing the ability
+            -- byte there desyncs the sequence and HANGS the white transition screen (the bug two
+            -- testers hit on progression items). The lock is still enforced the instant Kirby is
+            -- back in a stage.
+            if illegal_frames>=ABILITY_DELAY then wb(ABILITY_ADDR,0); illegal_frames=0 end
+        else
+            illegal_frames=0   -- out of stage: pause the watchdog, leave the ability untouched
+        end
     else
         illegal_frames=0
         -- ability-acquired check: only meaningful if the apworld option added these
@@ -551,11 +643,15 @@ local function tick()
                 -- never let a vitality bit persist in-level: keeping it would let the game's
                 -- heart-complete animation read an inflated count and crash. Check already
                 -- sent above; health is driven by vit_received instead.
-                clear_bit(i); cur[math.floor(i/8)]=rb(COLL+math.floor(i/8))
+                clear_bit(i); cur[math.floor(i/8)]=rb(COLL+math.floor(i/8)); dec_stage_counter()
             elseif received_bits[i] then
                 -- received: keep it in the collection
+            elseif NO_CLEAR[i] then
+                -- boss badge: opening one also writes a large world-progression block, so a plain
+                -- bit-clear would orphan that. Left intact pending the in-game world-gating work.
+                -- Check already fired above.
             else
-                clear_bit(i); cur[math.floor(i/8)]=rb(COLL+math.floor(i/8))
+                clear_bit(i); cur[math.floor(i/8)]=rb(COLL+math.floor(i/8)); dec_stage_counter()
             end
         end
     end
@@ -602,6 +698,6 @@ local okc=pcall(rb,COLL)
 if okc then
     local f=read_coll(); local c=0
     for i=0,NUM_BITS-1 do if bit_set(f,i) then c=c+1 end end
-    print("KSS connector ready (v22). "..c.." chest locations already collected.")
+    print("KSS connector ready (v28). "..c.." chest locations already collected.")
     msg("<(^-^<) Kirby connector ready! let's find some treasure!")
 else print("ERROR reading collectibles field"); msg("x_x  connector: RAM error") end
