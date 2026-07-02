@@ -1,4 +1,4 @@
-Make sure to use the newest release!
+Make sure to use the newest release! And don't use any patch files it may output because they could mess with the rom!
 
 Disclaimer: I do not have programming experience and created this Archipelago experience with AI. Please let me know of any issues or suggestions on Discord! Still working to make this sound more human, you'll see some of my annotations as you read.
 
