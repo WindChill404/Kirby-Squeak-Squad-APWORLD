@@ -104,7 +104,7 @@ load before you connect the client.
 4. **Open the Kirby Squeak Squad Client** from the Archipelago Launcher.
 
 5. **Connect.** In the client: `/connect <address:port>`, then enter your **slot
-   name** when asked. Wait for **"Connected."** Now play normally.
+   name** when asked. Wait for **"Connected."** Now play normally. - When rejoining, I would advise being in a stage or stage select of a world you have unlocked, being on the world map can be weird
 
 ---
 
