@@ -43,14 +43,14 @@ class StartingSpray(Choice):
 
     Pink is Kirby's default and is always available. Choose a color to also OWN that spray from
     the start (it shows in your collection and you can apply / re-apply it freely from the spray
-    menu), or pick 'random' to be granted a random spray each seed. 'none' = Pink only.
+    menu). 'none' = Pink only. Set this to 'random' in your YAML to have Archipelago pick one for
+    you -- that's handled by AP itself, so there's no explicit 'random' option here.
 
     Unlike the old Random Starting Color, this grants the real spray instead of a cosmetic tint,
     so it sticks and doesn't fight the spray menu.
     """
     display_name = "Starting Spray"
     option_none = 0
-    option_random = 1
     option_yellow = 2
     option_red = 3
     option_green = 4

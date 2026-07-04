@@ -44,12 +44,11 @@ class KirbySqueakSquadWorld(World):
 
     def generate_early(self) -> None:
         # resolve the starting spray once (per seed) so the item pool and grant are stable.
-        # None = Pink only; otherwise the chosen (or a random) spray is granted at start.
+        # None = Pink only. Archipelago resolves a YAML 'random' to a concrete option value before
+        # this runs, so we only ever see 'none' (0) or a specific color (2..19).
         self.start_spray = None
         spray = self.options.starting_spray.value
-        if spray == 1:                       # random
-            self.start_spray = self.random.choice(SPRAY_NAMES)
-        elif spray >= 2:                     # a specific color
+        if spray >= 2:                       # a specific color
             self.start_spray = SPRAY_NAMES[spray - 2]
 
     def create_item(self, name: str) -> KSSItem:
