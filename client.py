@@ -48,6 +48,7 @@ DEATH_OUT_FILE = os.path.join(TEMP, "kss_death_out.txt")  # connector -> here: K
 DEATH_IN_FILE  = os.path.join(TEMP, "kss_death_in.txt")   # here -> connector: remote death (receive)
 COLOR_FILE     = os.path.join(TEMP, "kss_color.txt")      # here -> connector: starting color index
 CHECKED_FILE   = os.path.join(TEMP, "kss_checked.txt")    # here -> connector: authoritative checked-chest bits (overlay)
+CONNECTED_FILE = os.path.join(TEMP, "kss_connected.txt")  # here -> connector: present only while connected to the AP server
 
 
 class KSSCommandProcessor(ClientCommandProcessor):
@@ -136,18 +137,19 @@ class KSSContext(CommonContext):
                 except OSError:
                     self._last_death_out = None
                 Utils.async_start(self.update_death_link(True))
-            if "start_color" in slot_data:
-                try:
-                    with open(COLOR_FILE, "w", encoding="utf-8") as f:
-                        f.write(str(int(slot_data["start_color"])))
-                except OSError:
-                    pass
             if self.goal_mode == 1:
                 logger.info(f"Goal: collect {self.goal_count} chests and beat Daroach "
                             f"(Ice Island boss).")
             else:
                 logger.info("Goal: beat the game (claim the Strawberry Shortcake).")
             logger.info("Connected. Open chests in-game to send checks.")
+            # Signal the connector that we're really on the AP server now (it prints the
+            # "connected" notice on seeing this, instead of guessing from the items file).
+            try:
+                with open(CONNECTED_FILE, "w", encoding="utf-8") as f:
+                    f.write("1")
+            except OSError:
+                pass
         elif cmd == "ReceivedItems":
             self._write_items()
 
@@ -220,7 +222,19 @@ class KSSContext(CommonContext):
 async def game_watcher(ctx: KSSContext):
     while not ctx.exit_event.is_set():
         await asyncio.sleep(1.0)
-        if ctx.server and ctx.slot is not None:
+        connected = bool(ctx.server and ctx.slot is not None)
+        # Keep the connector's connection flag in sync with the LIVE connection every poll, so a
+        # flag left over from an earlier session can't make a freshly reloaded Lua report
+        # "connected" before you've actually reconnected. Present only while truly connected.
+        try:
+            if connected:
+                with open(CONNECTED_FILE, "w", encoding="utf-8") as f:
+                    f.write("1")
+            else:
+                os.remove(CONNECTED_FILE)
+        except OSError:
+            pass
+        if connected:
             locs = ctx.read_checks()
             if locs:
                 await ctx.send_msgs([{"cmd": "LocationChecks", "locations": locs}])
@@ -258,6 +272,12 @@ def launch(*args):
     Utils.init_logging("KSSClient")
 
     async def _main():
+        # Clear any stale connection flag from a previous session so the connector doesn't
+        # report "connected" before we've actually reached the AP server this run.
+        try:
+            os.remove(CONNECTED_FILE)
+        except OSError:
+            pass
         parser = get_base_parser()
         ns = parser.parse_args(args)
         ctx = KSSContext(ns.connect, ns.password)

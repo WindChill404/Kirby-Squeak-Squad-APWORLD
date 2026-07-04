@@ -37,17 +37,39 @@ class AbilityChecks(Toggle):
     display_name = "Ability Acquired Checks"
 
 
-class RandomStartingColor(Toggle):
-    """Tint Kirby a random color each seed (cosmetic only).
+class StartingSpray(Choice):
+    """Which spray paint Kirby owns from the start. Granted directly -- no location check is
+    consumed for it.
 
-    Picks one of Kirby's render colors per seed and holds it while you're in a stage.
-    This is purely visual and safe (it only writes the live render byte, never your
-    save). Two quirks: the game repaints Kirby from his saved color on some menus
-    (most noticeably the collection screen), so the tint briefly reverts there and
-    snaps back on the next gameplay frame; and spray paints can't change your color
-    while this is on.
+    Pink is Kirby's default and is always available. Choose a color to also OWN that spray from
+    the start (it shows in your collection and you can apply / re-apply it freely from the spray
+    menu), or pick 'random' to be granted a random spray each seed. 'none' = Pink only.
+
+    Unlike the old Random Starting Color, this grants the real spray instead of a cosmetic tint,
+    so it sticks and doesn't fight the spray menu.
     """
-    display_name = "Random Starting Color"
+    display_name = "Starting Spray"
+    option_none = 0
+    option_random = 1
+    option_yellow = 2
+    option_red = 3
+    option_green = 4
+    option_snow = 5
+    option_carbon = 6
+    option_ocean = 7
+    option_sapphire = 8
+    option_grape = 9
+    option_emerald = 10
+    option_orange = 11
+    option_chocolate = 12
+    option_cherry = 13
+    option_chalk = 14
+    option_shadow = 15
+    option_ivory = 16
+    option_citrus = 17
+    option_white = 18
+    option_lavender = 19
+    default = 0
 
 
 @dataclass
@@ -56,4 +78,4 @@ class KirbySqueakSquadOptions(PerGameCommonOptions):
     goal: Goal
     chest_goal_count: ChestGoalCount
     ability_checks: AbilityChecks
-    random_starting_color: RandomStartingColor
+    starting_spray: StartingSpray

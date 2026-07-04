@@ -1,3 +1,164 @@
+-- KirbySqueakSquad_Connector.lua  (v44 - Meta Knight badge item-locked; Gamble Galaxy no longer free)
+--
+--   New in v44:
+--   * GAMBLE GALAXY ITEM-LOCK. The Meta Knight badge (bit 68) was in NO_CLEAR, so beating Meta Knight
+--     left the vanilla badge set and the game opened Gamble Galaxy from it + your star seals -- WITHOUT
+--     ever receiving the Meta Knight Badge from AP (out of logic; regions.py gates Gamble Galaxy behind
+--     the received badge). Bit 68 now masks like any other badge: beating Meta Knight sends the check
+--     then clears the bit, and Gamble Galaxy is wired into WORLD_GATE ([7]=68) so its unlock is held off
+--     until you RECEIVE the Meta Knight Badge (which sets bit 68 on the map via collection_bits, like
+--     the seals). Only Dark Nebula (69, the final boss, gates nothing) stays in NO_CLEAR.
+--
+-- KirbySqueakSquad_Connector.lua  (v43 - Vocal Volcano EX/boss substage off-by-one fixed)
+--
+--   New in v43:
+--   * VOCAL VOLCANO EX/BOSS KEYING. Vocal Volcano (world 5) has only 4 normal stages, so the game
+--     reports its EX at substage 4 and its boss at substage 5 -- one lower than every other world.
+--     CHEST_BY_STAGE keyed them at 45/46 (the uniform EX=5/boss=6 assumption), so entering the EX
+--     stage looked up empty key 44 and never active-cleared the Animal Copy Palette (bit 89): a
+--     received copy masked its own chest and the check never fired. Moved EX -> key 44 and boss -> 45,
+--     and taught stage_label (via EX_SUBSTAGE) that VV's EX is substage 4, so the boss no longer shows
+--     as "5-EX" in the overlay.
+--
+-- KirbySqueakSquad_Connector.lua  (v42 - Nature Notch world-gate lock-out fixed; release v0.0.8)
+--
+--   New in v42:
+--   * NATURE NOTCH LOCK-OUT FIX. enforce_world_gates no longer clears Nature Notch's world-unlock bit.
+--     Beating Dedede force-opens that world and scripts you into 2-1, so the connector was in a tug-of-
+--     war with the game over that bit -- which went unstable across a client disconnect and repeated
+--     world-select round-trips, flickering 2-2 open and eventually locking you out of 2-1 (which is
+--     in-logic). Nature Notch is the one world with a scripted entry, so its real gate is 2-2+, handled
+--     by NN_STAGE_GATE holding 2-1's cleared flag off until the King DeDeDe badge arrives. Worlds 3+ are
+--     still gated normally at the world-unlock bit.
+--
+-- KirbySqueakSquad_Connector.lua  (v41 - collection masking fixed at the source; scroll upgrades granted)
+--
+--   New in v41:
+--   * MASKING FIX (checks now fire for items you've already been sent). A received item's collectible
+--     bit is no longer left set when its chest loads. maintain_collection ACTIVELY CLEARS the current
+--     stage's still-unopened chest bits (WORLD/SUBSTAGE update to the target stage ~73 frames before it
+--     loads), so the chest loads openable -- not grayed -- and its open fires the check on the spot.
+--     Already-opened chests stay shown, so a received item doesn't vanish from the collection when you
+--     open it on its own stage.
+--   * SCROLL UPGRADES actually apply in-level now. enforce_upgrade_store() GRANTS the session upgrade
+--     bit for any ability whose 2nd Progressive copy you've received (it previously only stripped
+--     unearned upgrades), so an AP-sent scroll upgrades the ability and survives level changes/reloads.
+--   * TREASURE-BYTE REMAP: 10 mislabeled treasures corrected against the collection-room category order
+--     (Orange->79, Parasol Scroll->33, Sleep Scroll->42, Spunky Notes->54, ...). Requires a fresh
+--     generation with the matching apworld.
+--   * Tracker/overlay caches (kss_opened_cache.txt, kss_checked.txt) are cleared on load, so a previous
+--     seed's opened chests don't linger.
+--
+-- KirbySqueakSquad_Connector.lua  (v37 - Nature Notch 2-2 gate via the 2-1 cleared flag)
+--
+--   New in v37:
+--   * Nature Notch 2-2+ now stay LOCKED until the King DeDeDe badge is received. The post-Dedede
+--     push forces you through 2-1, and clearing 2-1 normally unlocks 2-2 -- so, after the 2-1 clear
+--     CHECK has been sent (AP still registers it), the connector holds 2-1's *cleared* flag off
+--     (bit0 of 0x022560DA) while the badge isn't owned, which keeps 2-2 from unlocking. When the
+--     badge arrives it restores the flag (only if you actually cleared 2-1) so progression resumes.
+--     This closes the world-1 hole that the v34 boss-beaten mask left open (that mask is scoped to
+--     worlds >= 2 to avoid disturbing the scripted 2-1 push). Toggle: NN_STAGE_GATE.
+--     NOTE: this is the first time we write a stage-clear byte -- worth a save+reload check that the
+--     2-1/2-2 state and overall save stay clean.
+--
+-- KirbySqueakSquad_Connector.lua  (v36 - title-cased item names, named copy palettes, starting spray)
+--
+--   New in v36:
+--   * Item names are Title Cased everywhere (NAME_TO_BIT + the overlay labels), matching the apworld
+--     rename (e.g. "Fire scroll" -> "Fire Scroll", "Vitality half_1" -> "Vitality Half 1"). The five
+--     generic "Copy palette N" items are now named: Check / Pastel / Industrial / Animal / Machine
+--     Copy Palette. (NAME_TO_BIT, items.py, kss_chest_data.py and the overlay all stay in lockstep.)
+--   * Random Starting Color (the live cosmetic tint) is GONE. The apworld's new Starting Spray option
+--     grants a real spray as starting inventory, so the connector just receives it like any other
+--     collectible and sets its bit -- no live render-byte write, no kss_color.txt. The player owns the
+--     spray (shows in collection, applies from the spray menu) and no location check is consumed.
+--
+-- KirbySqueakSquad_Connector.lua  (v35 - persistent overlay cache; AP link moves to the Lua console)
+--
+--   New in v35:
+--   * The always-on in-game "AP client: LINKED..." indicator is GONE. Instead the connector prints
+--     ">>> KSS: Archipelago client connected (bridge live)." to the Lua console once, the first time
+--     it sees the client's bridge file. Keeps the game screen clean.
+--   * The opened-chest overlay now PERSISTS across sessions on its own. The connector keeps its own
+--     kss_opened_cache.txt (union of chests it detected + the client's authoritative list) and
+--     reloads it on launch, so the overlay is correct after a Lua reload / BizHawk restart and even
+--     before the AP client reconnects (or with no client running). It only ever gains bits.
+--
+-- KirbySqueakSquad_Connector.lua  (v34 - world gating: post-boss leak closed via boss-beaten mask)
+--
+--   New in v34:
+--   * POST-BOSS LEAK CLOSED. v33's gate cleared 0x02256094 (stages-playable), which controls the
+--     world-map nodes a NORMAL map re-init builds -- but right after a boss the game opens the next
+--     world straight from the boss-beaten flag 0x022560D6 instead, so the new world stayed walkable/
+--     enterable until a "round trip" (enter another world and come back) forced a rebuild. Confirmed
+--     by capture: 0x94 bit2 was already clear yet Cushy Cloud was fully playable post-boss.
+--     enforce_world_gates() now also CLEARS 0x022560D6 bit (W-1) for any gated world W>=2 (the bit of
+--     the boss that opens W), so the post-boss map-init locks the world immediately -- no round trip.
+--     Verified in-game: masking the Mrs Moley bit locked Cushy the instant she fell.
+--     World 1's boss bit (bit0) is deliberately left alone so the scripted post-Dedede 2-1 push still
+--     works; Nature Notch 2-1 stays in-logic in regions.py. Cosmetic only: a gated world's prior boss
+--     node may show un-beaten while you lack the badge.
+--
+--   New in v33:
+--   * IN-GAME WORLD GATING. Each world's stages stay locked until you've RECEIVED the boss badge
+--     from the previous world (the linear chain in regions.py): Nature Notch <- King DeDeDe badge,
+--     Cushy Cloud <- Mrs Moley, Jam Jungle <- Mecha-Kracko, and so on (worlds 1-6 via badges 62-67).
+--     Lever is bit W of 0x02256094 (the "stages playable" bitfield; bit2 = Cushy Cloud confirmed by
+--     capture). The game writes that bit only once (when you beat the prior boss) and never re-asserts
+--     it, so enforce_world_gates() drives it both ways: it SETS the bit while you hold the gating
+--     badge and CLEARS it while you don't. You can still slide the world-map cursor onto a locked
+--     world, but entering bounces you back at its stage-select. Set WORLD_GATING=false to disable.
+--     NOTE: beating King DeDeDe scripts you straight into 2-1, bypassing this bit, so Nature Notch's
+--     FIRST stage must be modeled as in-logic in regions.py; the gate then catches everything from
+--     2-2 on. World 0 (Prism Plains) is never gated; Secret Sea stays on the seal system.
+--     TEST: with a badge un-received, confirm that world's stages bounce you; once the badge is
+--     received, confirm the world opens normally. Capture one more boss->unlock (e.g. world 2->3) to
+--     confirm bit3 follows the bit=world pattern before trusting the upper worlds.
+--
+--   New in v32:
+--   * SCROLL-UPGRADE LEAK FIXED. The game keeps a session-only "this ability is upgraded" bitfield
+--     in working RAM at 0x022618AC (bit = scroll collectible bit - 28). Grabbing a scroll set that
+--     bit and granted you the EX upgrade for the whole session -- even with the chest bit masked
+--     and no 2nd Progressive copy received. It's not in the save (gone on reload), but a single
+--     long session kept the unearned upgrade the entire time. enforce_upgrade_store() now keeps the
+--     bit cleared for any ability you haven't received the 2nd copy of, in safe states only (in a
+--     stage / on the world map, never during the 0x1B/0x1C chest-get transition). Authorized
+--     upgrades (2nd copy received -> chest bit derived into the store at load) are left untouched.
+--     RAM map credit: bitfield base + per-ability bits pinned via the focused upgrade-watch capture.
+--
+--   New in v31:
+--   * KEYS / STAR SEALS no longer AUTO-CLAIM. When COLLECTION_ON_RECEIVE is on they ride the same
+--     collection-timing as cosmetics: held SET out of a stage (so the game still sees them on the
+--     world map to open EX gates / Secret Sea) and CLEARED in a stage (so their chest stays
+--     openable). That means YOU open the key/seal chest to send its check, instead of it being
+--     auto-sent on receive -- so the location tracker can be marked off normally. Set
+--     COLLECTION_ON_RECEIVE=false to restore the v30 auto-claim behavior.
+--     TEST after updating: confirm EX stages and Secret Sea still unlock from RECEIVING the
+--     key/seal (the gate is read on the map, where the bit is held set) -- if one doesn't open,
+--     tell me and we'll capture exactly when the game reads it.
+--   * Boss badges stay as they were (collection-managed for now); proper badge gating + display is
+--     part of the world-gating work.
+--
+--   New in v30:
+--   * Collection-on-receive (no patch) -- see below.
+--
+-- KirbySqueakSquad_Connector.lua  (v30 - collection-on-receive [no patch]; overlay + overflow fix kept)
+--
+--   New in v30:
+--   * COLLECTION ON RECEIVE (no ROM patch). A received collectible now appears in the in-game
+--     collection as soon as you receive it, not only after you open its chest. The collectible bit
+--     doubles as the chest's opened/gray flag, so we decouple them by timing (proven crash-safe by
+--     the KSS_COLLECTION_TEST harness): out of a stage the connector SETS your received collectible
+--     bits so the collection screen shows them; in a stage it CLEARS them so the matching chests
+--     stay un-gray and openable; on the treasure (chest-open) screen it leaves them alone so masking
+--     runs untouched. Vitality (HP-driven), keys/seals (permanently set for EX gates), and badges
+--     (NO_CLEAR) keep their existing handling. Toggle with COLLECTION_ON_RECEIVE (set false for the
+--     v29 fill-as-you-open behavior).
+--
+--   New in v29:
+--   * In-game opened-chest overlay + client kss_checked.txt feed (see below).
+--
 -- KirbySqueakSquad_Connector.lua  (v29 - adds the in-game opened-chest overlay; v28 overflow fix kept)
 --
 --   New in v29:
@@ -154,16 +315,31 @@ local ITEMS_FILE  = TEMP .. "\\kss_items.txt"
 local GOAL_FILE   = TEMP .. "\\kss_goal.txt"
 local DEATH_OUT   = TEMP .. "\\kss_death_out.txt"  -- connector -> client: Kirby died (send)
 local DEATH_IN    = TEMP .. "\\kss_death_in.txt"   -- client -> connector: remote death (receive)
-local COLOR_FILE  = TEMP .. "\\kss_color.txt"      -- client -> connector: starting color index
 local CHECKED_FILE = TEMP .. "\\kss_checked.txt"   -- client -> connector: authoritative checked-chest list (for the overlay)
+local CACHE_FILE   = TEMP .. "\\kss_opened_cache.txt" -- connector-owned persistent opened-bit cache (survives reloads / no client)
+local CONNECTED_FILE = TEMP .. "\\kss_connected.txt"  -- client -> connector: present only while actually connected to the AP server
 -- ---- in-game opened-chest overlay (Option B) ----
 local OVERLAY_DEFAULT_ON = true    -- is the overlay showing when you launch?
 local OVERLAY_TOGGLE_KEY = "T"     -- press this key to show/hide the overlay live.
                                    -- If it clashes with an EmuHawk hotkey, change it (any key
                                    -- name works, e.g. "Y", "Tab", "F8") or unbind it in EmuHawk.
+-- ---- collection-on-receive (no-patch) ----
+-- When true, a received collectible shows in the in-game COLLECTION as soon as you receive it,
+-- instead of only after you open its chest. The collectible bit doubles as the chest's "opened/
+-- gray" flag, so we fake the decoupling by timing (validated crash-safe by KSS_COLLECTION_TEST):
+--   out of a stage (and not the treasure screen) -> SET received bits  (collection shows them)
+--   in a stage                                   -> CLEAR them         (chests stay openable)
+-- Set false to fall back to the v29 behavior (collection fills only as you open chests).
+local COLLECTION_ON_RECEIVE = true
+-- v34 (#4): also show self-sent items on the post-stage CLEAR screen, so you don't have to step out
+-- to the map to see them. Normally maintain_collection() skips the 0x1B/0x1C chest-tally states; with
+-- this on, it still SETS received-item bits there. Re-enabled: the phantom-check problem is now
+-- handled two ways -- prev_set_bit makes display writes invisible to the open-detector, and on the
+-- clear screen we skip displaying the CURRENT stage's own chest bits (see maintain_collection), so a
+-- chest you're actually opening this clear can't be masked by its display bit. Received items (incl.
+-- the one you just earned) show immediately on the clear screen again.
+local SHOW_RECEIVED_ON_CLEAR = true
 local STATE_ADDR  = 0x02255740                     -- gamestate; 0x2e = Kirby Dead
-local COLOR_ADDR  = 0x0226189C                     -- LIVE Kirby color (render byte; safe to write)
-local NUM_COLORS  = 19
 
 -- DeathLink RECEIVE: the exact in-place death-commit cluster the game sets when it kills
 -- Kirby (verified by capture). Writing HP=0 plus these (relative to the Kirby struct base)
@@ -177,80 +353,80 @@ local DEATH_FLAGS = {
 -- bitfield. We drive max HP ourselves from how many halves were received, and we never let
 -- these bits persist in-level (so the game's heart-complete animation can't crash on a
 -- mismatched count). maxHP = BASE_MAXHP + HEART_HP * floor(halves / 2).
-local VITALITY = {[6]=true,[7]=true,[9]=true,[10]=true,[11]=true,[12]=true,[13]=true,[117]=true}
+local VITALITY = {[6]=true,[7]=true,[8]=true,[9]=true,[10]=true,[11]=true,[12]=true,[13]=true}
 local BASE_MAXHP, HEART_HP = 36, 4
 
 local NAME_TO_BIT = {
-    ["Star seal 1"] = 0,
-    ["Star seal 2"] = 1,
-    ["Star seal 3"] = 2,
-    ["Star seal 4"] = 3,
-    ["Star seal 5"] = 4,
-    ["Sound player"] = 5,
-    ["Vitality half_1"] = 6,
-    ["Vitality half_2"] = 7,
-    ["Orange"] = 8,
-    ["Vitality half_4"] = 9,
-    ["Vitality half_5"] = 10,
-    ["Vitality half_6"] = 11,
-    ["Vitality half_7"] = 12,
-    ["Vitality half_8"] = 13,
-    ["Prism Plains key"] = 14,
-    ["Nature Notch key"] = 15,
-    ["Cushy Cloud key"] = 16,
-    ["Jam Jungle key"] = 17,
-    ["Vocal Volcano key"] = 18,
-    ["Ice Island key"] = 19,
-    ["Secret Sea key"] = 20,
-    ["Ghost medal_1"] = 21,
-    ["Ghost medal_2"] = 22,
-    ["Ghost medal_3"] = 23,
-    ["Ghost medal_4"] = 24,
-    ["Ghost medal_5"] = 25,
-    ["Ghost medal_6"] = 26,
-    ["Ghost medal_7"] = 27,
-    ["Fire scroll"] = 28,
-    ["Ice scroll"] = 29,
-    ["Spark scroll"] = 30,
-    ["Beam scroll"] = 31,
-    ["Tornado scroll"] = 32,
-    ["Enemy Sounds"] = 33,
-    ["Hammer scroll"] = 34,
-    ["Cupid scroll"] = 35,
-    ["Cutter scroll"] = 36,
-    ["Laser scroll"] = 37,
-    ["Bomb scroll"] = 38,
-    ["Wheel scroll"] = 39,
-    ["HiJump scroll"] = 40,
-    ["UFO scroll"] = 41,
-    ["Copy palette 4"] = 42,
-    ["Sword scroll"] = 43,
-    ["Ninja scroll"] = 44,
-    ["Fighter scroll"] = 45,
-    ["Throw scroll"] = 46,
-    ["Magic scroll"] = 47,
-    ["Animal scroll"] = 48,
-    ["Bubble scroll"] = 49,
-    ["Metal scroll"] = 50,
+    ["Star Seal 1"] = 0,
+    ["Star Seal 2"] = 1,
+    ["Star Seal 3"] = 2,
+    ["Star Seal 4"] = 3,
+    ["Star Seal 5"] = 4,
+    ["Sound Player"] = 5,
+    ["Vitality Half 1"] = 6,
+    ["Vitality Half 2"] = 7,
+    ["Vitality Half 3"] = 8,
+    ["Vitality Half 4"] = 9,
+    ["Vitality Half 5"] = 10,
+    ["Vitality Half 6"] = 11,
+    ["Vitality Half 7"] = 12,
+    ["Vitality Half 8"] = 13,
+    ["Prism Plains Key"] = 14,
+    ["Nature Notch Key"] = 15,
+    ["Cushy Cloud Key"] = 16,
+    ["Jam Jungle Key"] = 17,
+    ["Vocal Volcano Key"] = 18,
+    ["Ice Island Key"] = 19,
+    ["Secret Sea Key"] = 20,
+    ["Ghost Medal 1"] = 21,
+    ["Ghost Medal 2"] = 22,
+    ["Ghost Medal 3"] = 23,
+    ["Ghost Medal 4"] = 24,
+    ["Ghost Medal 5"] = 25,
+    ["Ghost Medal 6"] = 26,
+    ["Ghost Medal 7"] = 27,
+    ["Fire Scroll"] = 28,
+    ["Ice Scroll"] = 29,
+    ["Spark Scroll"] = 30,
+    ["Beam Scroll"] = 31,
+    ["Tornado Scroll"] = 32,
+    ["Enemy Sounds"] = 59,
+    ["Hammer Scroll"] = 34,
+    ["Cupid Scroll"] = 35,
+    ["Cutter Scroll"] = 36,
+    ["Laser Scroll"] = 37,
+    ["Bomb Scroll"] = 38,
+    ["Wheel Scroll"] = 39,
+    ["HiJump Scroll"] = 40,
+    ["UFO Scroll"] = 41,
+    ["Animal Copy Palette"] = 89,
+    ["Sword Scroll"] = 43,
+    ["Ninja Scroll"] = 44,
+    ["Fighter Scroll"] = 45,
+    ["Throw Scroll"] = 46,
+    ["Magic Scroll"] = 47,
+    ["Animal Scroll"] = 48,
+    ["Bubble Scroll"] = 49,
+    ["Metal Scroll"] = 50,
     ["Party Notes"] = 51,
     ["Beginning Notes"] = 52,
     ["Happy Notes"] = 53,
-    ["Graphic piece_17"] = 54,
+    ["Graphic Piece 17"] = 117,
     ["Battle Notes"] = 55,
     ["Familiar Notes"] = 56,
     ["Secret Notes"] = 57,
     ["Kirby's Sounds"] = 58,
-    ["Parasol scroll"] = 59,
-    ["Graphic piece_13"] = 60,
+    ["Parasol Scroll"] = 33,
+    ["Graphic Piece 13"] = 116,
     ["Secret Sounds"] = 61,
-    ["King DeDeDe badge"] = 62,
-    ["Mrs Moley badge"] = 63,
-    ["Mecha-Kracko badge"] = 64,
-    ["Yadgaine badge"] = 65,
-    ["Bohboh badge"] = 66,
-    ["Daroach badge"] = 67,
-    ["Meta Knight badge"] = 68,
-    ["Dark Nebula badge"] = 69,
+    ["King DeDeDe Badge"] = 62,
+    ["Mrs Moley Badge"] = 63,
+    ["Mecha-Kracko Badge"] = 64,
+    ["Yadgaine Badge"] = 65,
+    ["Bohboh Badge"] = 66,
+    ["Daroach Badge"] = 67,
+    ["Meta Knight Badge"] = 68,
+    ["Dark Nebula Badge"] = 69,
     ["Yellow"] = 70,
     ["Red"] = 71,
     ["Green"] = 72,
@@ -260,7 +436,7 @@ local NAME_TO_BIT = {
     ["Sapphire"] = 76,
     ["Grape"] = 77,
     ["Emerald"] = 78,
-    ["Graphic piece_8"] = 79,
+    ["Graphic Piece 8"] = 101,
     ["Chocolate"] = 80,
     ["Cherry"] = 81,
     ["Chalk"] = 82,
@@ -269,51 +445,51 @@ local NAME_TO_BIT = {
     ["Citrus"] = 85,
     ["White"] = 86,
     ["Lavender"] = 87,
-    ["Copy palette 1"] = 88,
-    ["Sleep scroll"] = 89,
-    ["Copy palette 3"] = 90,
-    ["Copy palette 5"] = 91,
-    ["Copy palette 2"] = 92,
-    ["Secret Map_1"] = 93,
-    ["Secret Map_2"] = 94,
-    ["Secret Map_3"] = 95,
-    ["Secret Map_4"] = 96,
-    ["Secret Map_5"] = 97,
-    ["Secret Map_6"] = 98,
-    ["Secret Map_7"] = 99,
-    ["Graphic piece_1"] = 100,
-    ["Spunky Notes"] = 101,
-    ["Graphic piece_15"] = 102,
-    ["Graphic piece_9"] = 103,
-    ["Graphic piece_18"] = 104,
-    ["Graphic piece_12"] = 105,
-    ["Graphic piece_7"] = 106,
-    ["Graphic piece_4"] = 107,
-    ["Graphic piece_16"] = 108,
-    ["Graphic piece_5"] = 109,
-    ["Graphic piece_14"] = 110,
-    ["Graphic piece_3"] = 111,
-    ["Graphic piece_19"] = 112,
-    ["Graphic piece_2"] = 113,
-    ["Graphic piece_6"] = 114,
-    ["Graphic piece_11"] = 115,
-    ["Sound Effects"] = 116,
-    ["Vitality half_3"] = 117,
-    ["Graphic piece_10"] = 118
+    ["Check Copy Palette"] = 88,
+    ["Sleep Scroll"] = 42,
+    ["Industrial Copy Palette"] = 90,
+    ["Machine Copy Palette"] = 91,
+    ["Pastel Copy Palette"] = 92,
+    ["Secret Map 1"] = 93,
+    ["Secret Map 2"] = 94,
+    ["Secret Map 3"] = 95,
+    ["Secret Map 4"] = 96,
+    ["Secret Map 5"] = 97,
+    ["Secret Map 6"] = 98,
+    ["Secret Map 7"] = 99,
+    ["Graphic Piece 1"] = 100,
+    ["Spunky Notes"] = 54,
+    ["Graphic Piece 15"] = 102,
+    ["Graphic Piece 9"] = 103,
+    ["Graphic Piece 18"] = 104,
+    ["Graphic Piece 12"] = 105,
+    ["Graphic Piece 7"] = 106,
+    ["Graphic Piece 4"] = 107,
+    ["Graphic Piece 16"] = 108,
+    ["Graphic Piece 5"] = 109,
+    ["Graphic Piece 14"] = 110,
+    ["Graphic Piece 3"] = 111,
+    ["Graphic Piece 19"] = 112,
+    ["Graphic Piece 2"] = 113,
+    ["Graphic Piece 6"] = 114,
+    ["Graphic Piece 11"] = 115,
+    ["Sound Effects"] = 60,
+    ["Orange"] = 79,
+    ["Graphic Piece 10"] = 118
 }
 local KEY_SEAL = {
-    ["Cushy Cloud key"] = true,
-    ["Ice Island key"] = true,
-    ["Jam Jungle key"] = true,
-    ["Nature Notch key"] = true,
-    ["Prism Plains key"] = true,
-    ["Secret Sea key"] = true,
-    ["Star seal 1"] = true,
-    ["Star seal 2"] = true,
-    ["Star seal 3"] = true,
-    ["Star seal 4"] = true,
-    ["Star seal 5"] = true,
-    ["Vocal Volcano key"] = true
+    ["Cushy Cloud Key"] = true,
+    ["Ice Island Key"] = true,
+    ["Jam Jungle Key"] = true,
+    ["Nature Notch Key"] = true,
+    ["Prism Plains Key"] = true,
+    ["Secret Sea Key"] = true,
+    ["Star Seal 1"] = true,
+    ["Star Seal 2"] = true,
+    ["Star Seal 3"] = true,
+    ["Star Seal 4"] = true,
+    ["Star Seal 5"] = true,
+    ["Vocal Volcano Key"] = true
 }
 -- Copy abilities for the Progressive system:
 --   val    = value at 0x18C when this ability is held
@@ -341,8 +517,8 @@ local ABILITY = {
     ["Animal"]  = {val=0x15, scroll=48, acq=18},
     ["Bubble"]  = {val=0x16, scroll=49, acq=19},
     ["Metal"]   = {val=0x17, scroll=50, acq=20},
-    ["Parasol"] = {val=0x06, scroll=59, acq=21},
-    ["Sleep"]   = {val=0x0E, scroll=89, acq=22},
+    ["Parasol"] = {val=0x06, scroll=33, acq=21},
+    ["Sleep"]   = {val=0x0E, scroll=42, acq=22},
 }
 -- reverse lookup: 0x18C value -> ability name (only the 23 gated abilities)
 local VAL_TO_ABILITY = {}
@@ -360,7 +536,15 @@ for nm,d in pairs(ABILITY) do VAL_TO_ABILITY[d.val]=nm end
 -- block (the next-world unlock), so clearing just the badge bit would orphan that. Badge handling
 -- is part of the in-progress in-game world-gating work, so badges stay un-cleared for now.
 local NO_CLEAR = {}
-for b=62,69 do NO_CLEAR[b]=true end                                                         -- boss badges only
+NO_CLEAR[69]=true   -- only Dark Nebula now (final Gamble Galaxy boss; nothing gates on it). Meta Knight
+-- (68) was removed -- leaving it set let beating Meta Knight open Gamble Galaxy WITHOUT receiving the
+-- badge; it now masks normally and Gamble Galaxy opens only on receiving it (bit 68 held on the map by
+-- collection_bits, exactly like the star seals). The
+-- world-1-6 gating badges (62-67) are NO LONGER exempt: leaving them set let an in-game boss kill
+-- light the badge bit permanently, which (a) showed the badge in the collection without receiving it
+-- and (b) is the bit the game derives the next world's unlock from -- the root cause of the gate
+-- leaking. They now mask like any collectible (check fires first, then the bit clears), and a
+-- RECEIVED badge re-shows via collection_bits out of a stage.
 
 -- heal = fraction of MAX health restored; life = extra lives
 local FILLER = {
@@ -382,7 +566,8 @@ local function msg(text) gui.addmessage(text) end
 
 -- pick flavor by what kind of thing arrived
 local function item_flavor(name)
-    if name:sub(-6)=="scroll" then
+    local lname = name:lower()
+    if lname:sub(-6)=="scroll" then
         return "(*v*) Scroll get!  "..name.." -- ability unlocked!"
     elseif KEY_SEAL[name] then
         return "(>'-')> Key get!  "..name
@@ -390,9 +575,9 @@ local function item_flavor(name)
         return "p(^_^)q 1-UP!  one more try in your pocket!"
     elseif FILLER[name] and FILLER[name].heal then
         return "<(^o^)> Yum!  "..name.." restored some health!"
-    elseif name:find("badge") then
+    elseif lname:find("badge") then
         return "(^o^)b Badge get!  "..name
-    elseif name:find("seal") then
+    elseif lname:find("seal") then
         return "(*^-^) Star Seal!  "..name
     else
         return "(>^-^)>  Treasure get!  "..name
@@ -440,7 +625,10 @@ local function set_bit(idx) local by=math.floor(idx/8); local bi=idx%8; local a=
     if (math.floor(c/m)%2)==0 then wb(a,c+m) end end
 local function clear_bit(idx) local by=math.floor(idx/8); local bi=idx%8; local a=COLL+by; local c=rb(a); local m=2^bi
     if (math.floor(c/m)%2)==1 then wb(a,c-m) end end
-local function append_check(idx) local f=io.open(CHECKS_FILE,"a"); if f then f:write(tostring(idx).."\n"); f:close() end end
+-- AP client link indicator: confirms the connector is actually talking to the Archipelago client.
+local client_seen = false      -- true once the client's bridge files appear / items start arriving
+local n_items_rx, n_checks_tx = 0, 0
+local function append_check(idx) n_checks_tx=n_checks_tx+1; local f=io.open(CHECKS_FILE,"a"); if f then f:write(tostring(idx).."\n"); f:close() end end
 
 local function kirby_base()
     local p=ru32(KINFO_PTR)
@@ -453,13 +641,29 @@ local function poll_items()
     local f=io.open(ITEMS_FILE,"r"); if not f then return {} end
     local r={}; local i=0
     for line in f:lines() do i=i+1; if i>items_read then r[#r+1]=line end end
-    f:close(); items_read=items_read+#r; return r
+    f:close(); items_read=items_read+#r; n_items_rx=n_items_rx+#r; return r
+end
+
+-- Print the "connected" notice only when the client signals a real AP-server connection
+-- (it writes kss_connected.txt on the Connected package and clears it at launch). Watching the
+-- items file was premature -- that file can linger from a prior session before you've connected.
+local function poll_connected()
+    if client_seen then return end
+    local f=io.open(CONNECTED_FILE,"r"); if not f then return end
+    f:close(); client_seen=true
+    print(">>> KSS: connected to the Archipelago server.")
 end
 
 do local cf=io.open(CHECKS_FILE,"w"); if cf then cf:close() end
    local gf=io.open(GOAL_FILE,"w");   if gf then gf:close() end end
-   -- NOTE: kss_color.txt is NOT cleared here. The client writes it once per seed; the
-   -- connector reads it and applies the color continuously, so it must survive reloads.
+-- Drop any leftover connection flag on load: only a running, AP-connected client rewrites it
+-- (every ~1s), so a stale flag from a closed/disconnected client can't falsely report "connected".
+os.remove(CONNECTED_FILE)
+-- Drop the persistent overlay/tracker files on load too, so a previous seed's opened chests don't
+-- linger in the tracker. The connected client rewrites kss_checked.txt from the server (authoritative
+-- for THIS seed) within ~1-2s, and opened chests this session repopulate the cache as you go.
+os.remove(CACHE_FILE)
+os.remove(CHECKED_FILE)
 
 local prev = read_coll()
 local prev_gate = gate_sum()
@@ -469,6 +673,7 @@ local prev_sc = {}
 -- like Daroach beaten before a connector reload) re-register; checks are deduped
 -- by the client/server, so re-sending is harmless.
 for w=0,SC_WORLDS-1 do prev_sc[w]=0 end
+local nn1_was_cleared = false   -- has Nature Notch 2-1 been cleared this session (for the stage gate)
 local goal_sent = false
 -- DeathLink state
 local death_out_n = 0
@@ -477,7 +682,6 @@ local last_death_in = ""
 do local df=io.open(DEATH_IN,"r"); if df then last_death_in=(df:read("*l") or ""); df:close() end end
 local kill_frames = 0       -- per-frame death-commit application remaining (dense, short)
 local suppress_frames = 0   -- ticks to not echo our own forced death
-local color_target = nil
 -- Vitality health: how many halves received -> drives max HP
 local vit_received = 0
 local vit_heal = false
@@ -485,7 +689,35 @@ os.remove(DEATH_OUT)
 local received_prog = {}   -- ability name -> count of Progressive copies received (0/1/2)
 local acquired_sent = {}   -- ability name -> first-use check already sent
 local received_bits = {}
+-- normal collectibles we've received and now manage for the in-game collection display.
+-- (Excludes vitality [HP-driven, never set], keys/seals [permanently set via grant_and_claim],
+-- and badges [NO_CLEAR].) maintain_collection() sets these out of a stage / clears them in one.
+local collection_bits = {}
+local TREASURE_STATES = { [0x1B]=true, [0x1C]=true }   -- post-stage chest-open screens: leave bits alone here
 local opened_bits = {}
+-- Persistent overlay cache (v35): a connector-OWNED record of every chest bit we've ever seen
+-- opened -- whether we detected it ourselves (opened_bits) or the client fed it (kss_checked.txt).
+-- Written to kss_opened_cache.txt and reloaded on launch, so the in-game overlay survives a Lua
+-- reload / BizHawk restart and shows correctly even before the AP client reconnects (or with no
+-- client at all). It only ever gains bits, never loses them.
+local opened_cache = {}
+local function save_cache()
+    local f = io.open(CACHE_FILE, "w"); if not f then return end
+    local ks = {}; for b,_ in pairs(opened_cache) do ks[#ks+1] = b end
+    table.sort(ks)
+    for _,b in ipairs(ks) do f:write(tostring(b).."\n") end
+    f:close()
+end
+local function cache_add(bit)
+    if not opened_cache[bit] then opened_cache[bit] = true; save_cache() end
+end
+do  -- load the cache once at launch
+    local f = io.open(CACHE_FILE, "r")
+    if f then
+        for line in f:lines() do local b = tonumber(line); if b then opened_cache[b] = true end end
+        f:close()
+    end
+end
 local illegal_frames = 0
 local pending_heal = 0.0   -- accumulated fraction of max HP to restore
 local pending_lives = 0
@@ -524,6 +756,131 @@ local function apply_filler()
         local cur=ru32(LIFE_ADDR)
         if cur<999 then wu32(LIFE_ADDR, cur+pending_lives); pending_lives=0 end
     end
+end
+
+-- Forward declaration: returns a set {bit=true} of the chests in the stage currently being cleared.
+-- Defined after CHEST_BY_STAGE (below); current stage's chest bits, skipped on the clear screen so
+-- this-stage opens stay detectable while other received items display.
+local current_stage_chest_bits
+local is_opened   -- forward declaration; defined after the opened/checked/cache tables (below)
+
+-- Collection-on-receive timing: hold received collectibles' bits SET while out of a stage so the
+-- collection screen shows them, and CLEAR while in a stage so their chests don't gray. Called at the
+-- END of tick(), after chest-open detection.
+local function maintain_collection()
+    if not COLLECTION_ON_RECEIVE then return end
+    if kirby_base() then
+        for b in pairs(collection_bits) do clear_bit(b) end
+    elseif SHOW_RECEIVED_ON_CLEAR or not TREASURE_STATES[rb(STATE_ADDR)] then
+        -- Out of a stage: show received items in the in-game collection -- EXCEPT the chests of the stage
+        -- WORLD/SUBSTAGE points at, which we actively CLEAR. Picking a stage updates those addresses to the
+        -- target ~73 frames before it loads (and the stage renders its chests from these bits during the
+        -- same 0x1B select/load state), so merely skipping them isn't enough: a bit set earlier stays set
+        -- and the chest loads grayed/masked. Clearing the target stage's bits here guarantees they're clear
+        -- when it renders -> the chest for an already-received item loads openable and its open fires a check.
+        -- Everything else still displays, and keys/seals stay set on the map to drive the EX/Secret Sea gates.
+        -- prev_set_bit keeps the bits we DO set from being misread as opens; the cleared ones re-sync via the
+        -- detection loop's prev=cur, so a later real open still reads as a fresh flip.
+        local skip = current_stage_chest_bits and current_stage_chest_bits() or nil
+        for b in pairs(collection_bits) do
+            -- Active-clear only the current stage's STILL-UNOPENED chests -- those are the ones that must
+            -- load openable. A chest you've already opened here is checked, so there's no open left to
+            -- mask; keep it shown, so a received item doesn't vanish off the collection the moment you
+            -- open its chest while you're still standing on that stage.
+            if skip and skip[b] and not is_opened(b) then clear_bit(b)
+            else set_bit(b); prev_set_bit(b) end
+        end
+    end
+end
+
+-- Scroll-upgrade leak fix: the game keeps a SESSION-ONLY "this ability is upgraded" bitfield in
+-- working RAM at UPGRADE_STORE, indexed by (scroll collectible bit - 28): byte = UPGRADE_STORE +
+-- idx//8, bit idx%8 (verified on Fire/Beam/Cutter/Wheel/Animal -- all land on a constant offset of
+-- 28). Grabbing a scroll sets its bit (during the chest-get white transition) and hands you the EX
+-- upgrade for the WHOLE session, even though the chest bit is masked and you were never sent the
+-- 2nd Progressive copy. It's working RAM, not in the save, so it vanishes on reload -- but a single
+-- long session keeps the unearned upgrade the entire time, which is the common way people play.
+-- Authorized upgrades come from the saved chest bit being derived into this store at LOAD, so for
+-- any ability whose 2nd copy you HAVE received we leave its bit alone. For every other ability we
+-- keep its store bit cleared -- but ONLY in a safe state (in a stage, or on the world map), NEVER
+-- during the 0x1B/0x1C chest-get transition, where touching ability state desyncs the get-sequence
+-- and hangs the white screen (the same trap the ability watchdog avoids).
+local UPGRADE_STORE = 0x022618AC
+local function enforce_upgrade_store()
+    local st = rb(STATE_ADDR)
+    if TREASURE_STATES[st] then return end                 -- never during the chest-get transition
+    if not (kirby_base() or st == 0x05) then return end     -- only in a stage or on the world map
+    for name, info in pairs(ABILITY) do
+        local idx = info.scroll - 28
+        local a = UPGRADE_STORE + math.floor(idx/8)
+        local m = 2^(idx%8)
+        local c = rb(a)
+        local set = (math.floor(c/m)%2) == 1
+        if (received_prog[name] or 0) >= 2 then
+            if not set then wb(a, c+m) end   -- GRANT: 2nd copy received -> keep the upgrade active in-level
+        else
+            if set then wb(a, c-m) end        -- CLEAR: unearned (native scroll grab) -> strip it
+        end
+    end
+end
+
+-- World gating (v34): physically lock each world's stages until its gating boss badge is RECEIVED,
+-- matching the linear badge chain in regions.py. Two levers, because the game decides "world W is
+-- enterable" in two different places:
+--   * 0x02256094 (WORLD_UNLOCK), bit W = world W playable. A NORMAL world-map (re)init derives the
+--     walkable nodes from this. We SET bit W while you hold world W's badge, CLEAR it while you
+--     don't. (Confirmed bit2 = Cushy Cloud. The game writes it once on boss-clear and never
+--     re-asserts, so we drive it both ways.)
+--   * 0x022560D6 (BOSS_BEATEN), bit W = world W's boss beaten. The POST-BOSS map-init opens the
+--     NEXT world straight from THIS flag, not from 0x94 -- that's the "world stays enterable until a
+--     round trip" leak. So for a gated world W (badge not received) we also CLEAR the bit of the
+--     boss that opens it (world W-1's boss = bit W-1), so the post-boss init locks it immediately.
+--     (Confirmed in-game: masking bit1 locked Cushy the instant Mrs Moley fell -- no round trip.)
+-- World 0 (Prism Plains) is the start, never gated. World 1's boss bit (bit0) is left ALONE: the
+-- post-Dedede push into Nature Notch 2-1 is intentional/scripted (2-1 is modeled in-logic in
+-- regions.py), so the boss-beaten clear is scoped to worlds >= 2. Secret Sea (world 6) is gated by the
+-- Daroach badge; Gamble Galaxy (world 7) is gated by the Meta Knight badge (plus the seals the game
+-- reads on the map). Set WORLD_GATING=false to disable the whole feature.
+local WORLD_UNLOCK = 0x02256094
+local BOSS_BEATEN  = 0x022560D6
+local WORLD_GATING = true
+-- Nature Notch stage gate: the post-Dedede push forces 2-1 to be played before the King DeDeDe
+-- badge is owned, and clearing 2-1 normally unlocks 2-2. While the badge isn't received we hold
+-- 2-1's *cleared* flag off (after its AP check has gone out) so 2-2+ stay locked; once the badge
+-- arrives we restore it so progression resumes. Set false to disable just this.
+local NN_STAGE_GATE = true
+local WORLD_GATE = {          -- world bit (0-indexed) -> gating badge collectible bit (prev boss)
+    [1] = 62,   -- Nature Notch   <- King DeDeDe badge
+    [2] = 63,   -- Cushy Cloud    <- Mrs Moley badge
+    [3] = 64,   -- Jam Jungle     <- Mecha-Kracko badge
+    [4] = 65,   -- Vocal Volcano  <- Yadgaine badge
+    [5] = 66,   -- world 5        <- Bohboh badge
+    [6] = 67,   -- world 6        <- Daroach badge
+    [7] = 68,   -- Gamble Galaxy  <- Meta Knight badge (Secret Sea boss). Gamble Galaxy also needs the
+                -- star seals in-game (held on the map via collection_bits), but its badge gate lives
+                -- here so beating Meta Knight can't open it without RECEIVING the Meta Knight Badge.
+}
+local function enforce_world_gates()
+    if not WORLD_GATING then return end
+    local c = rb(WORLD_UNLOCK); local nc = c
+    local b = rb(BOSS_BEATEN);  local nb = b
+    for wbit, badge in pairs(WORLD_GATE) do
+        local m = 2^wbit
+        if received_bits[badge] then
+            if (math.floor(nc/m)%2) == 0 then nc = nc + m end       -- authorized: ensure 0x94 bit SET
+        elseif wbit >= 2 then
+            -- Gate worlds 2+ at the world-unlock bit. Nature Notch (wbit 1) is deliberately NOT locked
+            -- here: beating Dedede scripts you into 2-1 and the game force-opens the world, and 2-1 is
+            -- in-logic -- clearing the world bit fights that and can strand you out of 2-1 on the map
+            -- (the disconnect / world-select round-trip lock-out). Nature Notch's real gate is 2-2+,
+            -- handled by NN_STAGE_GATE holding 2-1's cleared flag off until the King DeDeDe badge arrives.
+            if (math.floor(nc/m)%2) == 1 then nc = nc - m end       -- gated: ensure 0x94 bit CLEARED
+            local bm = 2^(wbit-1)                                   -- world W opened by world W-1's boss
+            if (math.floor(nb/bm)%2) == 1 then nb = nb - bm end     -- also stop the boss-beaten force-open
+        end
+    end
+    if nc ~= c then wb(WORLD_UNLOCK, nc) end
+    if nb ~= b then wb(BOSS_BEATEN, nb) end
 end
 
 local function tick()
@@ -572,21 +929,8 @@ local function tick()
         end
     end
 
-    -- Starting color: client drops kss_color.txt with an index once per seed. We hold the
-    -- LIVE render byte to that color while Kirby is in a level. This is cosmetic and safe.
-    -- QUIRK: the game repaints Kirby from its SAVED color on some screens (notably opening
-    -- the collection screen), so the color reverts there and we re-apply it on the next
-    -- gameplay frame. Spray paints can't override it while this is enforced.
-    if color_target == nil then
-        local cf=io.open(COLOR_FILE,"r")
-        if cf then
-            local v=tonumber((cf:read("*l") or "")); cf:close()
-            if v then color_target = v % NUM_COLORS; print("Starting color = "..color_target) end
-        end
-    end
-    if color_target ~= nil and kirby_base() then wb(COLOR_ADDR, color_target) end
-
     -- incoming items
+    poll_connected()
     for _,name in ipairs(poll_items()) do
         name=name:gsub("[\r\n]","")
         local prog = name:match("^Progressive (.+)$")
@@ -607,7 +951,11 @@ local function tick()
                 if VITALITY[b] then
                     vit_received = vit_received + 1   -- grows max HP; bit NOT set (crash-safe)
                     vit_heal = true
-                elseif KEY_SEAL[name] then grant_and_claim(b)
+                elseif KEY_SEAL[name] and not COLLECTION_ON_RECEIVE then grant_and_claim(b)
+                elseif COLLECTION_ON_RECEIVE then collection_bits[b]=true
+                    -- includes keys/seals: held SET out of a stage, so the game still sees them on
+                    -- the world map to open EX gates / Secret Sea, but CLEARED in a stage so their
+                    -- chest stays openable -> no auto-claim, so the tracker can be marked off normally.
                 elseif opened_bits[b] then set_bit(b); prev_set_bit(b) end
                 msg(item_flavor(name))
             else
@@ -652,8 +1000,14 @@ local function tick()
     -- chest opens
     local cur=read_coll(); local g=gate_sum(); local gate_changed=(g~=prev_gate)
     for i=0,NUM_BITS-1 do
-        if bit_set(cur,i) and not bit_set(prev,i) and gate_changed then
-            append_check(i); opened_bits[i]=true
+        -- A genuine chest open is a fresh bit flip (connector-set bits are all prev_set_bit-synced,
+        -- so they never read as flips here). gate_changed alone missed opens that didn't coincide with
+        -- a gate-range byte change -- e.g. opening the chest for a treasure you'd already been sent:
+        -- the bit was cleared in-stage so the chest wasn't grayed, you opened it, the flip was real, but
+        -- no check fired. Now an unchecked location fires on any fresh flip; already-checked ones still
+        -- require gate_changed so replays don't spam duplicates.
+        if bit_set(cur,i) and not bit_set(prev,i) and (gate_changed or not is_opened(i)) then
+            append_check(i); opened_bits[i]=true; cache_add(i)
             print("Check: location "..i); msg(chest_msg())
             if i==GOAL_BIT then
                 if not goal_sent then goal_sent=true
@@ -664,12 +1018,15 @@ local function tick()
                 -- heart-complete animation read an inflated count and crash. Check already
                 -- sent above; health is driven by vit_received instead.
                 clear_bit(i); cur[math.floor(i/8)]=rb(COLL+math.floor(i/8)); dec_stage_counter()
-            elseif received_bits[i] then
-                -- received: keep it in the collection
+            elseif (not COLLECTION_ON_RECEIVE) and received_bits[i] then
+                -- legacy behavior: keep the bit so opening the chest reveals it in the collection.
+                -- With COLLECTION_ON_RECEIVE on, received chests instead mask normally (below) and
+                -- the collectible is shown by maintain_collection() while you're out of a stage.
             elseif NO_CLEAR[i] then
-                -- boss badge: opening one also writes a large world-progression block, so a plain
-                -- bit-clear would orphan that. Left intact pending the in-game world-gating work.
-                -- Check already fired above.
+                -- Dark Nebula badge (69): the final Gamble Galaxy boss, gates nothing after it, so its
+                -- vanilla badge is left intact. Meta Knight (68) and the gating badges 62-67 are no
+                -- longer here -- they fall through to the normal mask, so an unearned boss kill sends
+                -- the check then clears the bit (Gamble Galaxy then opens only on RECEIVING badge 68).
             else
                 clear_bit(i); cur[math.floor(i/8)]=rb(COLL+math.floor(i/8)); dec_stage_counter()
             end
@@ -686,11 +1043,30 @@ local function tick()
                     local vidx=SC_VBASE+(10*w+bi); append_check(vidx)
                     print("Stage clear: world "..w.." sub "..bi.." (idx "..vidx..")")
                     msg("(>^o^)>  Stage clear!  "..(WORLD_NAMES[w+1] or ("W"..w)).." "..(bi+1))
+                    if w==1 and bi==0 then nn1_was_cleared=true end   -- Nature Notch 2-1
                 end
             end
             prev_sc[w]=v
         end
     end
+
+    -- Nature Notch stage gate (runs AFTER the loop above, so 2-1's clear check has already been
+    -- sent this tick). While the King DeDeDe badge isn't received, hold 2-1's cleared flag OFF so
+    -- 2-2+ stay locked despite the forced 2-1 push; once the badge is received, restore the flag
+    -- (only if 2-1 was actually cleared) so the game unlocks 2-2 again. Bit0 of SC_BASE+2 = 2-1.
+    if NN_STAGE_GATE then
+        local a = SC_BASE + 2
+        local v = rb(a)
+        local has = byte_bit(v, 0)
+        if not received_bits[62] then
+            if has then wb(a, v - 1); prev_sc[1] = v - 1 end          -- gate: keep 2-1 un-cleared
+        elseif nn1_was_cleared and not has then
+            wb(a, v + 1); prev_sc[1] = v + 1                          -- badge in hand: restore 2-1
+        end
+    end
+
+    enforce_upgrade_store()  -- clear unearned scroll upgrades (session-only working-RAM bitfield)
+    maintain_collection()   -- collection-on-receive timing (runs after chest-open detection)
 end
 
 -- ===================== IN-GAME OPENED-CHEST OVERLAY (Option B) =====================
@@ -701,60 +1077,65 @@ end
 -- sent, plus the authoritative list the client writes to kss_checked.txt from the server
 -- (so it survives reloads and shows chests opened before the overlay existed). The stage
 -- key is world*10+substage -- the same layout as the counter -- and substage = in-game
--- stage-1 (so 1-5 -> 0-4, EX -> 5, Boss -> 6). Press OVERLAY_TOGGLE_KEY to show/hide.
+-- stage-1 (so 1-5 -> 0-4, EX -> 5, Boss -> 6). Exception: Vocal Volcano (world 5) has only 4
+-- normal stages, so its EX is substage 4 and its boss substage 5. Press OVERLAY_TOGGLE_KEY to show/hide.
 
 local CHEST_BY_STAGE = {
   [1] = { {52,"Beginning Notes"} },
-  [2] = { {5,"Sound player"}, {28,"Fire scroll"} },
-  [3] = { {14,"Prism Plains key"}, {72,"Green"}, {100,"Graphic piece_1"} },
-  [4] = { {88,"Copy palette 1"} },
-  [5] = { {6,"Vitality half_1"}, {113,"Graphic piece_2"} },
-  [6] = { {62,"King DeDeDe badge"} },
-  [10] = { {0,"Star seal 1"}, {48,"Animal scroll"}, {58,"Kirby's Sounds"} },
-  [11] = { {21,"Ghost medal_1"}, {85,"Citrus"} },
-  [12] = { {39,"Wheel scroll"}, {92,"Copy palette 2"}, {111,"Graphic piece_3"} },
-  [13] = { {36,"Cutter scroll"} },
-  [14] = { {15,"Nature Notch key"}, {31,"Beam scroll"}, {107,"Graphic piece_4"} },
-  [15] = { {7,"Vitality half_2"}, {93,"Secret Map_1"}, {109,"Graphic piece_5"} },
-  [16] = { {63,"Mrs Moley badge"} },
-  [20] = { {30,"Spark scroll"}, {77,"Grape"}, {114,"Graphic piece_6"} },
-  [21] = { {1,"Star seal 2"}, {56,"Familiar Notes"} },
-  [22] = { {22,"Ghost medal_2"}, {94,"Secret Map_2"}, {106,"Graphic piece_7"} },
-  [23] = { {16,"Cushy Cloud key"}, {40,"HiJump scroll"}, {87,"Lavender"} },
-  [24] = { {32,"Tornado scroll"} },
-  [25] = { {8,"Orange"}, {79,"Graphic piece_8"}, {117,"Vitality half_3"} },
-  [26] = { {64,"Mecha-Kracko badge"} },
-  [30] = { {49,"Bubble scroll"}, {83,"Shadow"}, {103,"Graphic piece_9"} },
-  [31] = { {2,"Star seal 3"}, {70,"Yellow"} },
-  [32] = { {9,"Vitality half_4"}, {50,"Metal scroll"}, {90,"Copy palette 3"} },
-  [33] = { {17,"Jam Jungle key"}, {95,"Secret Map_3"}, {118,"Graphic piece_10"} },
-  [34] = { {37,"Laser scroll"} },
-  [35] = { {23,"Ghost medal_3"}, {29,"Ice scroll"}, {51,"Party Notes"} },
-  [36] = { {65,"Yadgaine badge"} },
-  [40] = { {3,"Star seal 4"}, {33,"Enemy Sounds"}, {59,"Parasol scroll"} },
-  [41] = { {34,"Hammer scroll"}, {84,"Ivory"}, {115,"Graphic piece_11"} },
-  [42] = { {10,"Vitality half_5"}, {44,"Ninja scroll"}, {105,"Graphic piece_12"} },
-  [43] = { {18,"Vocal Volcano key"}, {71,"Red"}, {96,"Secret Map_4"} },
-  [45] = { {24,"Ghost medal_4"}, {42,"Copy palette 4"}, {89,"Sleep scroll"} },
-  [46] = { {66,"Bohboh badge"} },
-  [50] = { {43,"Sword scroll"}, {60,"Graphic piece_13"}, {116,"Sound Effects"} },
-  [51] = { {4,"Star seal 5"}, {73,"Snow"} },
-  [52] = { {11,"Vitality half_6"}, {45,"Fighter scroll"}, {110,"Graphic piece_14"} },
-  [53] = { {19,"Ice Island key"}, {53,"Happy Notes"}, {82,"Chalk"} },
-  [54] = { {35,"Cupid scroll"}, {91,"Copy palette 5"}, {102,"Graphic piece_15"} },
-  [55] = { {25,"Ghost medal_5"}, {81,"Cherry"}, {97,"Secret Map_5"} },
-  [56] = { {67,"Daroach badge"} },
-  [60] = { {46,"Throw scroll"}, {61,"Secret Sounds"}, {86,"White"} },
-  [61] = { {26,"Ghost medal_6"}, {76,"Sapphire"}, {108,"Graphic piece_16"} },
-  [62] = { {38,"Bomb scroll"}, {54,"Graphic piece_17"}, {101,"Spunky Notes"} },
-  [63] = { {20,"Secret Sea key"}, {47,"Magic scroll"}, {75,"Ocean"} },
+  [2] = { {5,"Sound Player"}, {28,"Fire Scroll"} },
+  [3] = { {14,"Prism Plains Key"}, {72,"Green"}, {100,"Graphic Piece 1"} },
+  [4] = { {88,"Check Copy Palette"} },
+  [5] = { {6,"Vitality Half 1"}, {113,"Graphic Piece 2"} },
+  [6] = { {62,"King DeDeDe Badge"} },
+  [10] = { {0,"Star Seal 1"}, {48,"Animal Scroll"}, {58,"Kirby's Sounds"} },
+  [11] = { {21,"Ghost Medal 1"}, {85,"Citrus"} },
+  [12] = { {39,"Wheel Scroll"}, {92,"Pastel Copy Palette"}, {111,"Graphic Piece 3"} },
+  [13] = { {36,"Cutter Scroll"} },
+  [14] = { {15,"Nature Notch Key"}, {31,"Beam Scroll"}, {107,"Graphic Piece 4"} },
+  [15] = { {7,"Vitality Half 2"}, {93,"Secret Map 1"}, {109,"Graphic Piece 5"} },
+  [16] = { {63,"Mrs Moley Badge"} },
+  [20] = { {30,"Spark Scroll"}, {77,"Grape"}, {114,"Graphic Piece 6"} },
+  [21] = { {1,"Star Seal 2"}, {56,"Familiar Notes"} },
+  [22] = { {22,"Ghost Medal 2"}, {94,"Secret Map 2"}, {106,"Graphic Piece 7"} },
+  [23] = { {16,"Cushy Cloud Key"}, {40,"HiJump Scroll"}, {87,"Lavender"} },
+  [24] = { {32,"Tornado Scroll"} },
+  [25] = { {8,"Vitality Half 3"}, {79,"Orange"}, {117,"Graphic Piece 17"} },
+  [26] = { {64,"Mecha-Kracko Badge"} },
+  [30] = { {49,"Bubble Scroll"}, {83,"Shadow"}, {103,"Graphic Piece 9"} },
+  [31] = { {2,"Star Seal 3"}, {70,"Yellow"} },
+  [32] = { {9,"Vitality Half 4"}, {50,"Metal Scroll"}, {90,"Industrial Copy Palette"} },
+  [33] = { {17,"Jam Jungle Key"}, {95,"Secret Map 3"}, {118,"Graphic Piece 10"} },
+  [34] = { {37,"Laser Scroll"} },
+  [35] = { {23,"Ghost Medal 3"}, {29,"Ice Scroll"}, {51,"Party Notes"} },
+  [36] = { {65,"Yadgaine Badge"} },
+  [40] = { {3,"Star Seal 4"}, {33,"Parasol Scroll"}, {59,"Enemy Sounds"} },
+  [41] = { {34,"Hammer Scroll"}, {84,"Ivory"}, {115,"Graphic Piece 11"} },
+  [42] = { {10,"Vitality Half 5"}, {44,"Ninja Scroll"}, {105,"Graphic Piece 12"} },
+  [43] = { {18,"Vocal Volcano Key"}, {71,"Red"}, {96,"Secret Map 4"} },
+  -- Vocal Volcano has only 4 normal stages, so its EX/boss sit one substage LOWER than every other
+  -- world: the game reports EX at substage 4 (key 44) and the boss at substage 5 (key 45), not 45/46.
+  -- Keying them at 45/46 (the uniform assumption) left the EX active-clear looking up empty key 44,
+  -- so a received Animal Copy Palette masked its own chest and no check fired.
+  [44] = { {24,"Ghost Medal 4"}, {42,"Sleep Scroll"}, {89,"Animal Copy Palette"} },
+  [45] = { {66,"Bohboh Badge"} },
+  [50] = { {43,"Sword Scroll"}, {60,"Sound Effects"}, {116,"Graphic Piece 13"} },
+  [51] = { {4,"Star Seal 5"}, {73,"Snow"} },
+  [52] = { {11,"Vitality Half 6"}, {45,"Fighter Scroll"}, {110,"Graphic Piece 14"} },
+  [53] = { {19,"Ice Island Key"}, {53,"Happy Notes"}, {82,"Chalk"} },
+  [54] = { {35,"Cupid Scroll"}, {91,"Machine Copy Palette"}, {102,"Graphic Piece 15"} },
+  [55] = { {25,"Ghost Medal 5"}, {81,"Cherry"}, {97,"Secret Map 5"} },
+  [56] = { {67,"Daroach Badge"} },
+  [60] = { {46,"Throw Scroll"}, {61,"Secret Sounds"}, {86,"White"} },
+  [61] = { {26,"Ghost Medal 6"}, {76,"Sapphire"}, {108,"Graphic Piece 16"} },
+  [62] = { {38,"Bomb Scroll"}, {54,"Spunky Notes"}, {101,"Graphic Piece 8"} },
+  [63] = { {20,"Secret Sea Key"}, {47,"Magic Scroll"}, {75,"Ocean"} },
   [64] = { {80,"Chocolate"} },
-  [65] = { {12,"Vitality half_7"}, {98,"Secret Map_6"}, {104,"Graphic piece_18"} },
-  [66] = { {68,"Meta Knight badge"} },
-  [70] = { {41,"UFO scroll"}, {55,"Battle Notes"}, {112,"Graphic piece_19"} },
-  [71] = { {27,"Ghost medal_7"}, {78,"Emerald"}, {99,"Secret Map_7"} },
-  [72] = { {13,"Vitality half_8"}, {57,"Secret Notes"}, {74,"Carbon"} },
-  [76] = { {69,"Dark Nebula badge"} },
+  [65] = { {12,"Vitality Half 7"}, {98,"Secret Map 6"}, {104,"Graphic Piece 18"} },
+  [66] = { {68,"Meta Knight Badge"} },
+  [70] = { {41,"UFO Scroll"}, {55,"Battle Notes"}, {112,"Graphic Piece 19"} },
+  [71] = { {27,"Ghost Medal 7"}, {78,"Emerald"}, {99,"Secret Map 7"} },
+  [72] = { {13,"Vitality Half 8"}, {57,"Secret Notes"}, {74,"Carbon"} },
+  [76] = { {69,"Dark Nebula Badge"} },
 }
 
 local overlay_on = OVERLAY_DEFAULT_ON
@@ -782,20 +1163,43 @@ local function reload_checked()
         f:close()
     end
     checked_file = t
+    -- fold the server's authoritative opened list into the persistent cache, so those bits stick
+    -- even if the client later disconnects or kss_checked.txt is cleared
+    local changed = false
+    for b,_ in pairs(t) do if not opened_cache[b] then opened_cache[b] = true; changed = true end end
+    if changed then save_cache() end
 end
 
-local function is_opened(bit)
-    return (opened_bits[bit] or checked_file[bit]) and true or false
+function is_opened(bit)
+    return (opened_bits[bit] or checked_file[bit] or opened_cache[bit]) and true or false
 end
+
+-- Most worlds have 5 normal stages (EX at substage 5, boss at 6). Vocal Volcano (w=4) has only 4,
+-- so its EX is at substage 4 and boss at 5. Map any such exceptions here so the overlay labels match.
+local EX_SUBSTAGE = { [4] = 4 }   -- world index (0-based) -> substage of that world's EX stage
 
 local function stage_label(w, s)
     local wn = WORLD_NAMES[w+1] or ("World "..(w+1))
+    local ex = EX_SUBSTAGE[w] or 5
     local sn
-    if s <= 4 then sn = tostring(s+1)
-    elseif s == 5 then sn = "EX"
-    elseif s == 6 then sn = "Boss"
+    if s < ex then sn = tostring(s+1)
+    elseif s == ex then sn = "EX"
+    elseif s == ex + 1 then sn = "Boss"
     else sn = "?" end
     return string.format("%d-%s %s", w+1, sn, wn)
+end
+
+-- Assigns the forward-declared local. Set of chest bits in the stage being played/cleared right now,
+-- from the same WORLD/SUBSTAGE the overlay uses. Skipped on the clear screen so this-stage opens stay
+-- detectable while the clear screen displays the rest.
+function current_stage_chest_bits()
+    local w, s = ru32(WORLD_ADDR), ru32(SUBSTAGE_ADDR)
+    local set = {}
+    if w <= 7 and s <= 9 then
+        local list = CHEST_BY_STAGE[w*10 + s]
+        if list then for _,c in ipairs(list) do set[c[1]] = true end end
+    end
+    return set
 end
 
 local function draw_overlay()
@@ -817,6 +1221,7 @@ local function draw_overlay()
 end
 -- ================================================================================
 
+
 local n=0
 event.onframestart(function()
     n=n+1
@@ -834,17 +1239,32 @@ event.onframestart(function()
             if kill_frames > 60 then
                 for _,p in ipairs(DEATH_FLAGS) do wu32(base+p[1], p[2]) end
             end
+            -- Refresh the echo-suppression for as long as we're actually applying the death.
+            -- A death received on the map waits here (base invalid) until you enter a stage, by
+            -- which point the original 35-tick window has expired -- without this, the applied
+            -- death would be re-sent as a fresh DeathLink. Re-arming here keeps it suppressed.
+            suppress_frames = 8
             kill_frames = kill_frames - 1
         end
     end
+    enforce_world_gates()  -- frame START pass (see the frame-END pass below for why both)
     if n%POLL~=0 then return end
     tick()
 end, "kss_connector")
+
+-- World-gate frame-END pass. The game re-derives a world's unlock bit from "prior boss beaten" and
+-- re-asserts it MID-frame (confirmed: 0x94 oscillates while 0xD6 says the prior boss is down). A
+-- frame-start clear runs before that, so at the frame boundary the bit is sometimes ours, sometimes
+-- the game's -- and the world-select latches whatever it sees. Clearing again at frame end, AFTER the
+-- game's writes, makes the boundary value reliably ours, so the latch reads a locked world.
+event.onframeend(function()
+    enforce_world_gates()
+end, "kss_worldgate_end")
 
 local okc=pcall(rb,COLL)
 if okc then
     local f=read_coll(); local c=0
     for i=0,NUM_BITS-1 do if bit_set(f,i) then c=c+1 end end
-    print("KSS connector ready (v29). "..c.." chest locations already collected.")
+    print("KSS connector ready (v44). "..c.." chest locations already collected.")
     msg("<(^-^<) Kirby connector ready! let's find some treasure!")
 else print("ERROR reading collectibles field"); msg("x_x  connector: RAM error") end

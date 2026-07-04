@@ -1,19 +1,22 @@
-Make sure to use the newest release! And don't use any patch files it may output because they could mess with the rom!
+Make sure to use the newest release!
 
 Disclaimer: I do not have programming experience and created this Archipelago experience with AI. Please let me know of any issues or suggestions on Discord! Still working to make this sound more human, you'll see some of my annotations as you read.
 
-# Kirby: Squeak Squad — Archipelago — How to Play
+# Kirby: Squeak Squad — Archipelago
+
+**Release v0.0.8.** The BizHawk connector's Lua console prints its own build number on load (currently `v42`); pair the connector and apworld from this same release.
 
 A multiworld randomizer for Kirby: Squeak Squad (Nintendo DS). Opening chests and
 clearing stages send checks; you receive your items from Archipelago. Abilities are
-locked behind their scrolls, and boss badges gate access to later worlds.
+locked behind their Progressive copies, and boss badges gate access to later worlds.
 
 ---
 
 ## What you need
 
 - **BizHawk** (the emulator), using its **melonDS** core for NDS.
-- A **vanilla US** Kirby: Squeak Squad ROM (you supply this).
+- A **vanilla US** Kirby: Squeak Squad ROM (you supply this). The ROM is **not** patched —
+  chests stay vanilla and Archipelago delivers items by name, so a clean ROM is what you want.
 - **Archipelago 0.6.7** or newer (the standard installer build).
 - The two files from the latest **Release**:
   * `kirby_squeak_squad.apworld`
@@ -38,7 +41,10 @@ that ships in the same release as the apworld.
 1. Make a YAML for your slot. The important field is your **slot name** (e.g.
    `name: windstarkirby`) — remember it, you'll type it when connecting.
 2. Generate / host the game (locally or on archipelago.gg) like any other AP game.
-   Successful generation means the logic held (badge + scroll gating included).
+   Successful generation means the logic held (badge + ability gating included).
+
+> **This release changed the apworld's data** (a corrected treasure map and looser
+> chest logic), so **generate a fresh seed** for it — older seeds won't match.
 
 ### Optional settings (YAML)
 
@@ -56,12 +62,13 @@ add any of these to your YAML:
   you enter a stage.
 - `ability_checks: true` — adds a check the first time you use each copy ability you
   receive (23 extra locations, balanced with 23 extra filler items).
-- `random_starting_color: true` — tints Kirby a random color each seed. Purely
-  cosmetic and completely safe (it writes the live render color, never your save).
-  Two quirks: opening the **collection screen** (and a few menus) makes the game
-  repaint Kirby from his saved color, so the tint briefly reverts and snaps back the
-  next time you're in a stage; and spray paints can't change your color while this
-  is on.
+- `starting_spray: <color>` — own a spray paint from the **start**. It's granted as real
+  starting inventory: it shows in your collection and you can apply / re-apply it from the
+  spray menu, and **no location check is spent** for it. Use `random` to be granted a random
+  spray each seed, or leave it out / use `none` for Kirby's default Pink only. Colors:
+  `yellow, red, green, snow, carbon, ocean, sapphire, grape, emerald, orange, chocolate,
+  cherry, chalk, shadow, ivory, citrus, white, lavender`. (This replaces the old cosmetic
+  Random Starting Color — it grants the real spray, so it sticks and doesn't fight the spray menu.)
 
 When you connect, the client logs which goal is active, so you can confirm it took.
 
@@ -83,14 +90,14 @@ load before you connect the client.
      collected as "already done," so load it while your count is still 0. (1-1 has
      no chests, so it's the natural spot.)
 
-2. **(Only if needed) delete** `kss_checks.txt`, `kss_items.txt`, `kss_goal.txt` from
-   your `%TEMP%` folder. You normally do **not** need to — the connector clears its
-   own files on load. Only do this after a crash, a force-quit, or when switching to
-   a different room/seed.
+2. **(Only if needed) delete** the `kss_*.txt` files from your `%TEMP%` folder. You
+   normally do **not** need to — the connector clears its own bridge, cache, and tracker
+   files on load. Only do this after a crash, a force-quit, or when switching to a
+   different room/seed and something seems stuck.
 
 3. **Load the connector.** With Kirby standing in that first stage, open BizHawk's
    **Lua Console** (Tools → Lua Console) and load **`KirbySqueakSquad_Connector.lua`**.
-   It should print: `KSS connector ready (v29). 0 chest locations already collected.`
+   It should print: `KSS connector ready (v42). 0 chest locations already collected.`
    The `0` is your green light. A different number means you're on an old or polluted
    save — start a fresh file and reload.
 
@@ -104,10 +111,8 @@ load before you connect the client.
 ## Useful client commands
 
 - **`/received`** — lists every collectible you've received from Archipelago so far.
-  Handy because the in-game collection fills with a delay, so this is the quick way
-  to see what's actually arrived.
 - **`/kss`** — prints the bridge file paths, for troubleshooting.
-- **`/chests`** - this will let you see the number of in-game chests you have opened for the chests/Daroach goal
+- **`/chests`** — shows the number of in-game chests you've opened (for the chests/Daroach goal).
 
 Keep BizHawk (with the connector running) and the client both open while you play.
 
@@ -116,17 +121,18 @@ Keep BizHawk (with the connector running) and the client both open while you pla
 ## What happens as you play
 
 - **Open a chest** → one check is sent for that chest, and you receive the item
-  Archipelago placed there. The chest's vanilla item is replaced by the AP item.
+  Archipelago placed there. This is true even for a chest whose treasure you've
+  already been sent — the check still fires.
 - **Clear a stage** → a stage-clear check is sent (every chest-bearing stage counts).
-- **Abilities are scroll-locked**: inhaling an enemy for an ability whose scroll you
-  haven't received yet will let you hold it for about a second, then Kirby drops back
-  to Normal. Once you receive that scroll (a **Progressive** ability), it works; a
-  second copy gives the upgraded scroll version.
-- **Boss badges gate worlds** (in the logic): you'll receive the previous world's
-  boss badge before the next world is expected — Archipelago places items so this
-  always works out.
-- **Your collection fills** as you open chests and receive collectibles — sprays,
-  scrolls, music, and the rest show up on the collection screen.
+- **Abilities are locked**: inhaling an enemy for an ability you haven't received yet
+  lets you hold it for about a second, then Kirby drops back to Normal. The **first**
+  Progressive copy of an ability lets you keep it; the **second** copy is its **scroll
+  upgrade** (the enhanced version), which now applies in a stage and sticks across levels.
+- **Boss badges gate worlds**: a world stays locked until you've received the previous
+  world's boss badge. Archipelago places items so this always works out.
+- **Your collection fills** as you receive collectibles and open chests — sprays, scrolls,
+  music, and the rest show on the collection screen. Received items appear right away
+  (with one exception; see Known quirks).
 - **Filler items heal**: a received Maxim Tomato fully heals; Meat heals about half,
   Energy Drink a third, Cherries a sixth, and the small foods (Hamburger, Nikuman,
   Omelet, Rice Ball, Pudding) a ninth each. A 1-Up adds a life. If one arrives while
@@ -156,32 +162,33 @@ the level-map chest icons don't fill in. Two ways to see your progress:
 
 ## Known quirks (not bugs)
 
+- **A received collectible briefly disappears from your collection on the stage that holds
+  its chest.** To keep that chest openable — so its check still fires — the connector hides
+  that one stage's not-yet-opened chests while you're entering / on it. It comes right back
+  the moment you open the chest or leave the stage, and it only ever affects the single
+  stage you're currently on.
+- **Opening a vitality-half chest plays a health-up, then it reverts.** The chest is only a
+  *check* — your real max-HP growth comes from *receiving* vitality items (every two = +4
+  HP), which persists. The momentary boost from the chest itself is undone on purpose, so
+  you don't get health the seed didn't grant.
 - **Incoming deaths apply when you're in a stage.** Death Link is full send and receive,
   but if a remote death arrives while you're on the world map, Kirby dies the moment you
   next enter a stage (his health only exists in-stage).
-- **Random color reverts on the collection screen.** If `random_starting_color` is on,
-  opening the collection screen (and a few other menus) repaints Kirby from his saved
-  color. The tint comes back the next time you're in a stage. Spray paints can't
-  override it while it's enforced.
-- **Key / Star Seal chests can gray out.** The game opens EX stages and Secret Sea by
-  reading these 12 collectibles directly, so the connector sets their bit the instant you
-  **receive** the key/seal — and at the same moment auto-sends that chest's check. So if a
-  key or seal arrives **before** you open its own chest, that chest shows up already-opened
-  (gray) when you reach it, but **its check was never lost.**
 - **Opened chests don't fill the level-map icons.** Every chest you open is recorded by the
   connector rather than left set in your save (this is what keeps AP in control of the item
   and what makes replays safe). The trade-off is that the game's own map icons stay empty —
   use the built-in overlay (press **T**) or the Archipelago tracker to see what you've
   opened. See "Tracking what you've opened" above.
 - **Replaying a cleared stage is safe.** Re-entering a stage and re-opening its chests is
-  fine now. Earlier builds could white-screen on the results screen once a stage's chest
-  count was pushed past its max on a replay; the connector now prevents that.
-- **Collection fills gradually**, not the instant items arrive — a received
-  collectible appears once you've opened its chest. This is deliberate (it's what
-  keeps non-key chests from graying out).
+  fine. Earlier builds could white-screen on the results screen once a stage's chest count
+  was pushed past its max on a replay; the connector now prevents that.
 - **The very first stage (1-1) prints a "Stage clear" line but sends no check.**
   Chestless stages have no stage-clear location, so the detection is harmlessly
   ignored. Expected.
+- **The forced drop into Nature Notch 2-1 (right after Dedede) is a special case.** It
+  skips normal stage select, so a 2-1 chest for a treasure you'd already been sent could
+  load already-opened. Its check isn't lost — please report it if you hit it and it causes
+  trouble.
 
 ---
 
@@ -191,19 +198,26 @@ the level-map chest icons don't fill in. Two ways to see your progress:
   delete the `kss_*.txt` files, reload the connector, reconnect.
 - **Connector shows a non-zero count on a fresh save** → you're on a polluted save
   from an earlier session; start a brand-new file.
-- **Ability won't stick even with the scroll** → confirm the scroll actually arrived
-  in the client log; the lock uses received scrolls, not in-game pickups.
+- **Ability / scroll won't take even after it arrived** → confirm the item actually
+  showed in the client log; the lock and the upgrade both use received items, not in-game
+  pickups. The upgrade re-applies in-stage, so give it a moment after entering a level.
 - **Nothing sends when you open chests** → make sure the Lua console still shows the
   connector running and the client still says Connected.
-- **Received an item but nothing happened** → confirm the connector says **v29** and
-  the client says Connected; some items (collectibles) only show after you open their
-  chest.
+- **Received an item but nothing happened** → confirm the connector says **v42** and
+  the client says Connected.
 
 ---
 
 ## File pairing
 
 Keep the **connector** and the **apworld** together as a set. They share a fixed
-check protocol, so you don't need to regenerate rooms when only the connector
-changes. If you update one, use the matching version of the other from the same
-release.
+check protocol. If you update one, use the matching version of the other from the
+same release. Note that **this** release changed apworld data, so generate a fresh
+seed for it (see "Generating a game").
+
+---
+
+## Credits
+
+- **CalDrac** — original Kirby: Squeak Squad randomizer and treasure data.
+- **WindChill404** — Archipelago world, BizHawk connector, and integration.

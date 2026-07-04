@@ -23,11 +23,15 @@ from .locations import location_name_to_id
 from .regions import create_regions
 from .rules import set_rules
 from .options import KirbySqueakSquadOptions
-from . import patcher as _patcher
-import os
 
 class KSSWeb(WebWorld):
     theme = "ice"
+
+# The 18 unlockable spray paints, in StartingSpray option order (option value 2..19).
+# Pink (the default) is not a collectible and is intentionally absent.
+SPRAY_NAMES = ["Yellow", "Red", "Green", "Snow", "Carbon", "Ocean", "Sapphire", "Grape",
+               "Emerald", "Orange", "Chocolate", "Cherry", "Chalk", "Shadow", "Ivory",
+               "Citrus", "White", "Lavender"]
 
 class KirbySqueakSquadWorld(World):
     """Kirby: Squeak Squad treasure-shuffle randomizer."""
@@ -39,10 +43,14 @@ class KirbySqueakSquadWorld(World):
     location_name_to_id: ClassVar = location_name_to_id
 
     def generate_early(self) -> None:
-        # pick the random starting color once (per seed) so fill_slot_data is stable.
-        self.start_color = None
-        if self.options.random_starting_color:
-            self.start_color = self.random.randint(0, 18)  # 19 render colors
+        # resolve the starting spray once (per seed) so the item pool and grant are stable.
+        # None = Pink only; otherwise the chosen (or a random) spray is granted at start.
+        self.start_spray = None
+        spray = self.options.starting_spray.value
+        if spray == 1:                       # random
+            self.start_spray = self.random.choice(SPRAY_NAMES)
+        elif spray >= 2:                     # a specific color
+            self.start_spray = SPRAY_NAMES[spray - 2]
 
     def create_item(self, name: str) -> KSSItem:
         cls, _ = ITEM_TABLE[name]
@@ -52,12 +60,21 @@ class KirbySqueakSquadWorld(World):
         from .items import FILLER_NAMES
         pool = []
         for name, (_cls, qty) in ITEM_TABLE.items():
-            for _ in range(qty):
+            n = qty
+            if self.start_spray and name == self.start_spray:
+                n -= 1   # one copy is granted as starting inventory instead of placed
+            for _ in range(n):
                 pool.append(self.create_item(name))
-        if self.options.ability_checks:
-            # 23 ability-acquired locations were added; balance with 23 more filler
-            for i in range(23):
-                pool.append(self.create_item(FILLER_NAMES[i % len(FILLER_NAMES)]))
+        if self.start_spray:
+            # grant the spray directly (starting inventory) -> owned, no location check consumed
+            self.multiworld.push_precollected(self.create_item(self.start_spray))
+        # Pad with filler so the item count exactly matches the real (non-event) location count.
+        # This auto-balances every adjustment (stage-clear locations, ability checks, starting
+        # spray) instead of hand-counting, so an added location can't desync the pool again.
+        real_locs = sum(1 for loc in self.multiworld.get_locations(self.player)
+                        if loc.address is not None)
+        for i in range(real_locs - len(pool)):
+            pool.append(self.create_item(FILLER_NAMES[i % len(FILLER_NAMES)]))
         self.multiworld.itempool += pool
 
     def create_regions(self) -> None:
@@ -72,17 +89,4 @@ class KirbySqueakSquadWorld(World):
             "chest_goal_count": int(self.options.chest_goal_count.value),
             "death_link": int(self.options.death_link.value),
         }
-        if getattr(self, "start_color", None) is not None:
-            data["start_color"] = int(self.start_color)
         return data
-
-    def generate_output(self, output_directory: str) -> None:
-        """Emit the .apkss patch into the room download for this player."""
-        placements = _patcher.build_placements(self)
-        data = _patcher.create_patch(
-            placements,
-            slot_name=self.multiworld.get_player_name(self.player),
-            seed=str(self.multiworld.seed))
-        fname = f"AP_{self.multiworld.seed_name}_P{self.player}_{self.multiworld.get_player_name(self.player)}.apkss"
-        with open(os.path.join(output_directory, fname), "wb") as f:
-            f.write(data)
