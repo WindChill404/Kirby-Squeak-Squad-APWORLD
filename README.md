@@ -4,7 +4,7 @@ Disclaimer: I do not have programming experience and created this Archipelago ex
 
 # Kirby: Squeak Squad — Archipelago
 
-**Release v0.0.8.** The BizHawk connector's Lua console prints its own build number on load (currently `v42`); pair the connector and apworld from this same release.
+**Release v0.0.8.** The BizHawk connector's Lua console prints its own build number on load (currently `v44`); pair the connector and apworld from this same release.
 
 A multiworld randomizer for Kirby: Squeak Squad (Nintendo DS). Opening chests and
 clearing stages send checks; you receive your items from Archipelago. Abilities are
