@@ -182,9 +182,6 @@ the level-map chest icons don't fill in. Two ways to see your progress:
 - **Replaying a cleared stage is safe.** Re-entering a stage and re-opening its chests is
   fine. Earlier builds could white-screen on the results screen once a stage's chest count
   was pushed past its max on a replay; the connector now prevents that.
-- **The very first stage (1-1) prints a "Stage clear" line but sends no check.**
-  Chestless stages have no stage-clear location, so the detection is harmlessly
-  ignored. Expected.
 - **The forced drop into Nature Notch 2-1 (right after Dedede) is a special case.** It
   skips normal stage select, so a 2-1 chest for a treasure you'd already been sent could
   load already-opened. Its check isn't lost — please report it if you hit it and it causes
