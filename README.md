@@ -186,6 +186,10 @@ the level-map chest icons don't fill in. Two ways to see your progress:
   skips normal stage select, so a 2-1 chest for a treasure you'd already been sent could
   load already-opened. Its check isn't lost — please report it if you hit it and it causes
   trouble.
+- **The second Progressive Ability checks auto-send the scroll.** When you get a Progressive ability for the second
+  time, you get the functions of having that scroll, and to do so the game has to make sure you have the scroll and it
+  sets it. If you haven't already found that scroll, it will send the check of where it was, otherwise it would become
+  an impossible check. Only scrolls are affected like this because they're the only collectibles that persist in levels.
 
 ---
 
