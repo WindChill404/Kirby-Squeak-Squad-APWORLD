@@ -162,9 +162,12 @@ _STAGECLEAR = [
     ('Vocal Volcano 2 Clear', 41, 'VocalVolcano'),
     ('Vocal Volcano 3 Clear', 42, 'VocalVolcano'),
     ('Vocal Volcano 4 Clear', 43, 'VocalVolcano'),
-    ('Vocal Volcano 5 Clear', 44, 'VocalVolcano'),
-    ('Vocal Volcano EX Clear', 45, 'VocalVolcanoEX'),
-    ('Vocal Volcano Boss Clear', 46, 'VocalVolcano'),
+    # Vocal Volcano has only FOUR normal stages (WiKirby: 1-4, Boss, Secret), and the game's
+    # stage-clear bits pack SEQUENTIALLY after the stages that actually exist -- CONFIRMED in play:
+    # beating the boss fired slot 45 and beating EX fired slot 44. So EX = bit 4, Boss = bit 5.
+    # (Bit 6 is never set for this world, so nothing may be defined at slot 46.)
+    ('Vocal Volcano EX Clear', 44, 'VocalVolcanoEX'),
+    ('Vocal Volcano Boss Clear', 45, 'VocalVolcano'),
     ('Ice Island 1 Clear', 50, 'IceIsland'),
     ('Ice Island 2 Clear', 51, 'IceIsland'),
     ('Ice Island 3 Clear', 52, 'IceIsland'),
@@ -182,7 +185,11 @@ _STAGECLEAR = [
     ('Gamble Galaxy 1 Clear', 70, 'GambleGalaxy'),
     ('Gamble Galaxy 2 Clear', 71, 'GambleGalaxy'),
     ('Gamble Galaxy 3 Clear', 72, 'GambleGalaxy'),
-    ('Gamble Galaxy Boss Clear', 76, 'GambleGalaxy')
+    # Same sequential rule as Vocal Volcano: Gamble Galaxy has 3 stages and NO secret/EX stage, so
+    # its boss is bit 3 -- not bit 6. Slot 76 was never settable, which made it an impossible check
+    # (a progression item placed there = unwinnable seed). INFERRED from the VV evidence, not yet
+    # observed in play -- see the note in the release summary for the one-minute confirmation.
+    ('Gamble Galaxy Boss Clear', 73, 'GambleGalaxy')
 ]
 # Ability-acquired locations: created only when the ability_checks option is on.
 # (name, ability_index, ability)  id = ACQUIRED_BASE_ID + index ; gated on Progressive <ability>.
