@@ -2,6 +2,8 @@ Make sure to use the newest release!
 
 Disclaimer: I do not have programming experience and created this Archipelago experience with AI. Please let me know of any issues or suggestions on Discord! Still working to make this sound more human, you'll see some of my annotations as you read.
 
+Disclaimer #2: I am fairly certain this only works on Windows due to the live ram editing.
+
 # Kirby: Squeak Squad — Archipelago
 
 **Release v0.0.8.** The BizHawk connector's Lua console prints its own build number on load (currently `v47`); pair the connector and apworld from this same release.
