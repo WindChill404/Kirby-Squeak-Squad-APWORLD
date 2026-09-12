@@ -1,91 +1,208 @@
-"""Kirby: Squeak Squad - Archipelago world (CalDrac-data build)."""
-from typing import ClassVar
-from worlds.AutoWorld import World, WebWorld
-from worlds.LauncherComponents import Component, components, Type, launch_subprocess, icon_paths
+"""
+Kirby: Planet Robobot Archipelago World.
 
+A romfs-level integration for the 3DS game. Locations are the in-stage
+collectibles (Code Cubes, Stickers, Rare Stickers) plus stage/boss clears and
+optional sub-game clears; items are level access, abilities, armor, EX keys,
+cubes, and stickers. The generated patch rewrites the ROM's Mint level data so
+each collectible reports to Archipelago instead of granting its vanilla effect,
+and injects an AP bridge module that talks to the client.
+"""
+from typing import Any, ClassVar, Dict, List
 
-icon_paths["kss_icon"] = f"ap:{__name__}/icon.png"
+from BaseClasses import ItemClassification, Region, Tutorial
+from worlds.AutoWorld import WebWorld, World
+from worlds.LauncherComponents import (Component, Type, components,
+                                       launch_subprocess, SuffixIdentifier)
+
+from . import Constants as C
+from .Items import (ITEM_NAME_TO_ID, ITEM_TABLE, KirbyRobobotItem)
+from .Locations import (LOCATION_NAME_TO_ID, LOCATION_TABLE, OPTIONAL_CATEGORIES)
+from .Options import KirbyRobobotOptions
+from .Regions import create_regions, connect_regions
+from .Rules import set_rules
+from .Rom import KirbyRobobotSettings
 
 
 def _launch_client(*args):
-    from worlds.kirby_squeak_squad.client import launch
-    launch_subprocess(launch, name="KirbySqueakSquadClient", args=args)
+    """Launcher entry point.
+
+    LauncherComponents.launch_subprocess passes extra CLI args (the patch file
+    path, when a .apkr is opened/dragged) through its own `args` parameter it
+    must be forwarded explicitly, otherwise the path is silently dropped and the
+    client never sees the patch."""
+    from .KirbyRobobotClient import launch
+    launch_subprocess(launch, name="KirbyRobobotClient", args=args)
 
 
-components.append(Component(
-    "Kirby Squeak Squad Client",
-    func=_launch_client,
-    component_type=Type.CLIENT,
-    icon="kss_icon",
-))
-from .items import ITEM_TABLE, item_name_to_id, KSSItem, ITEM_BASE_ID
-from .locations import location_name_to_id
-from .regions import create_regions
-from .rules import set_rules
-from .options import KirbySqueakSquadOptions
+# Give the launcher entry its own icon rather than the generic one. Older
+# Archipelago releases don't expose icon_paths, so fall back to the default
+# instead of refusing to load.
+_ICON = None
+try:
+    from worlds.LauncherComponents import icon_paths
+    icon_paths["kirby_robobot"] = f"ap:{__name__}/data/kpr_client_icon.png"
+    _ICON = "kirby_robobot"
+except Exception:
+    pass
 
-class KSSWeb(WebWorld):
+if _ICON:
+    components.append(Component(
+        "Kirby Planet Robobot Client", func=_launch_client, component_type=Type.CLIENT,
+        file_identifier=SuffixIdentifier(".apkr"), icon=_ICON))
+else:
+    components.append(Component(
+        "Kirby Planet Robobot Client", func=_launch_client, component_type=Type.CLIENT,
+        file_identifier=SuffixIdentifier(".apkr")))
+
+
+class KirbyRobobotWeb(WebWorld):
     theme = "ice"
+    tutorials = [Tutorial(
+        "Multiworld Setup Guide",
+        "A guide to setting up Kirby: Planet Robobot for Archipelago.",
+        "English", "setup_en.md", "setup/en",
+        ["you"])]
 
-# The 18 unlockable spray paints, in StartingSpray option order (option value 2..19).
-# Pink (the default) is not a collectible and is intentionally absent.
-SPRAY_NAMES = ["Yellow", "Red", "Green", "Snow", "Carbon", "Ocean", "Sapphire", "Grape",
-               "Emerald", "Orange", "Chocolate", "Cherry", "Chalk", "Shadow", "Ivory",
-               "Citrus", "White", "Lavender"]
 
-class KirbySqueakSquadWorld(World):
-    """Kirby: Squeak Squad treasure-shuffle randomizer."""
-    game = "Kirby Squeak Squad"
-    web = KSSWeb()
-    options_dataclass = KirbySqueakSquadOptions
-    options: KirbySqueakSquadOptions
-    item_name_to_id: ClassVar = item_name_to_id
-    location_name_to_id: ClassVar = location_name_to_id
+class KirbyRobobotWorld(World):
+    """Kirby: Planet Robobot on the Nintendo 3DS.
 
-    def generate_early(self) -> None:
-        # resolve the starting spray once (per seed) so the item pool and grant are stable.
-        # None = Pink only. Archipelago resolves a YAML 'random' to a concrete option value before
-        # this runs, so we only ever see 'none' (0) or a specific color (2..19).
-        self.start_spray = None
-        spray = self.options.starting_spray.value
-        if spray >= 2:                       # a specific color
-            self.start_spray = SPRAY_NAMES[spray - 2]
+    Kirby storms the Access Ark to stop the Haltmann Works Company. Collect Code
+    Cubes, wield 27 copy abilities and the Robobot Armor, and unlock every mode.
+    """
+    game = C.GAME_NAME
+    web = KirbyRobobotWeb()
+    options_dataclass = KirbyRobobotOptions
+    options: KirbyRobobotOptions
 
-    def create_item(self, name: str) -> KSSItem:
-        cls, _ = ITEM_TABLE[name]
-        return KSSItem(name, cls, item_name_to_id[name], self.player)
+    # ROM path / ctrtool / mod_path settings, saved in host.yaml.
+    settings_key = "kirby_robobot_options"
+    settings: "ClassVar[KirbyRobobotSettings]"
 
-    def create_items(self) -> None:
-        from .items import FILLER_NAMES
-        pool = []
-        for name, (_cls, qty) in ITEM_TABLE.items():
-            n = qty
-            if self.start_spray and name == self.start_spray:
-                n -= 1   # one copy is granted as starting inventory instead of placed
-            for _ in range(n):
-                pool.append(self.create_item(name))
-        if self.start_spray:
-            # grant the spray directly (starting inventory) -> owned, no location check consumed
-            self.multiworld.push_precollected(self.create_item(self.start_spray))
-        # Pad with filler so the item count exactly matches the real (non-event) location count.
-        # This auto-balances every adjustment (stage-clear locations, ability checks, starting
-        # spray) instead of hand-counting, so an added location can't desync the pool again.
-        real_locs = sum(1 for loc in self.multiworld.get_locations(self.player)
-                        if loc.address is not None)
-        for i in range(real_locs - len(pool)):
-            pool.append(self.create_item(FILLER_NAMES[i % len(FILLER_NAMES)]))
-        self.multiworld.itempool += pool
+    item_name_to_id = ITEM_NAME_TO_ID
+    location_name_to_id = LOCATION_NAME_TO_ID
+
+    required_client_version = (0, 4, 5)
+
+    def create_item(self, name: str) -> KirbyRobobotItem:
+        data = ITEM_TABLE[name]
+        return KirbyRobobotItem(name, data.classification, data.code_offset, self.player)
 
     def create_regions(self) -> None:
-        create_regions(self)
+        regions = create_regions(self)
+        connect_regions(self, regions)
+
+    def create_items(self) -> None:
+        from .Items import (ITEM_TABLE as _IT)
+        from BaseClasses import ItemClassification as _IC
+        pool: List[KirbyRobobotItem] = []
+
+        # Only real locations take items event locations (e.g. "Collect All
+        # 100 Code Cubes") are filled with their own event item, so counting them
+        # here would overfill the pool.
+        total_locations = len([
+            loc for loc in self.multiworld.get_locations(self.player)
+            if loc.address is not None
+        ])
+
+        # Build the non-cube, non-filler core first so we know how much room the
+        # Code Cubes have to work with.
+        # Stickers are filler by design, but they are still specific
+        # collectibles that have to exist once each. Only the generic
+        # consumables are held back, since those are what pads the pool out to
+        # the location count. Skipping every filler item is what stopped a
+        # single sticker from ever being sent.
+        def _is_pool_collectible(nm):
+            return nm.startswith("Rare Sticker:") or nm.startswith("Sticker:")
+
+        core_count = 0
+        for name, data in ITEM_TABLE.items():
+            if (data.classification == ItemClassification.filler
+                    and not _is_pool_collectible(name)):
+                continue
+            if not self._item_enabled(name):
+                continue
+            for _ in range(data.count):
+                pool.append(self.create_item(name))
+                core_count += 1
+
+        # Code Cubes: always create 100 so every "collect all cubes" and EX-unlock
+        # interaction is representable, but classify them so the fill has room.
+        # When EX stages need cubes (ex_stage_handling location/both) the first
+        # N cubes per level are progression; the rest are useful. When EX stages
+        # use keys only, cubes are useful collectibles (still real items).
+
+        # If the pool already exceeds locations (tight configs), demote surplus
+        # progression-skip cubes to useful so fill isn't over-constrained. Real
+        # AP fill handles useful items as non-blocking.
+        # Pad or trim to match location count using filler consumables.
+        if len(pool) < total_locations:
+            while len(pool) < total_locations:
+                pool.append(self.create_item(self.get_filler_item_name()))
+        elif len(pool) > total_locations:
+            pool = _trim_pool(pool, total_locations)
+
+        self.multiworld.itempool += pool
 
     def set_rules(self) -> None:
         set_rules(self)
 
-    def fill_slot_data(self) -> dict:
-        data = {
+    def fill_slot_data(self) -> Dict[str, Any]:
+        return {
             "goal": self.options.goal.value,
-            "chest_goal_count": int(self.options.chest_goal_count.value),
-            "death_link": int(self.options.death_link.value),
+            "story_boss_count": self.options.story_boss_count.value,
+            "death_link": bool(self.options.death_link.value),
+            "open_all_stages": bool(self.options.open_all_stages.value),
+            "ability_gating": bool(self.options.ability_gating.value),
+            "armor_gating": bool(self.options.armor_gating.value),
+            "rare_sticker_checks": bool(self.options.rare_sticker_checks.value),
+            "sticker_checks": bool(self.options.sticker_checks.value),
+            "kirby_color": self.options.kirby_color.current_key,
         }
-        return data
+
+    def generate_output(self, output_directory: str) -> None:
+        # Build the patch: mapping of location-id -> placed item, plus options.
+        from .Patch import write_patch
+        write_patch(self, output_directory)
+
+    # --- helpers -------------------------------------------------------------
+    def _item_enabled(self, name: str) -> bool:
+        opts = self.options
+        # An item only belongs in the pool if its matching checks are enabled.
+        # Otherwise you could be *sent* a Rare Sticker that has no location to be
+        # found at, which is exactly the "received it but can't check it" problem.
+        if name.startswith("Rare Sticker:"):
+            return bool(opts.rare_sticker_checks.value)
+        if name.startswith("Sticker:"):
+            return bool(opts.sticker_checks.value)
+        return True
+
+    def get_filler_item_name(self) -> str:
+        # Real in-game pickups. Ordinary foods (1/5 heal) are by far the most
+        # common thing you find in Robobot, then 1-Ups, then the stronger heals:
+        # Energy Drink (1/2) and Maxim Tomato (full).
+        from .Items import FOOD_ITEMS, ONE_UP, ENERGY_DRINK, MAXIM_TOMATO
+        pool = FOOD_ITEMS + [ONE_UP, ENERGY_DRINK, MAXIM_TOMATO]
+        weights = ([6] * len(FOOD_ITEMS)) + [20, 8, 4]
+        return self.random.choices(pool, weights=weights, k=1)[0]
+
+
+def _trim_pool(pool, target):
+    """Trim the pool to `target`, dropping filler first, then useful items
+    (e.g. surplus Code Cubes / rare stickers), never progression."""
+    prog = [i for i in pool if i.advancement]
+    useful = [i for i in pool
+              if not i.advancement
+              and i.classification == ItemClassification.useful]
+    filler = [i for i in pool
+              if not i.advancement
+              and i.classification == ItemClassification.filler]
+
+    result = list(prog)
+    # Add back useful up to remaining room.
+    room = max(0, target - len(result))
+    result += useful[:room]
+    room = max(0, target - len(result))
+    result += filler[:room]
+    return result
