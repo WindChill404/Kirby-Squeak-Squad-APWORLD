@@ -1,221 +1,234 @@
-"""Locations for Kirby: Squeak Squad.
-Chest id = LOCATION_BASE_ID + bit_index ; stage-clear id = STAGECLEAR_BASE_ID + (10*world+sub)
 """
-from typing import Dict
+Locations.py Location table for Kirby: Planet Robobot.
+
+Locations fall into these groups:
+  * Code Cube locations (100)          always on
+  * Normal Sticker locations (138)     always on
+  * Rare Sticker locations (35)        always on
+  * All-Cubes reward (1)               always on
+  * Story boss / stage clears          always on
+  * EX-stage unlocks (per level)       always on
+  * Kirby 3D Rumble (3)                optional
+  * Team Kirby Clash (6)               optional
+  * Meta Knightmare Returns (6)        optional
+  * The Arena (11)                     optional
+  * The True Arena (12)                optional
+
+Each location carries the ROM coordinates (file / index / wuid) needed by the
+patcher so the in-stage item can be swapped for an AP check.
+"""
+import json
+import os
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+
 from BaseClasses import Location
-LOCATION_BASE_ID = 5_000_100
-STAGECLEAR_BASE_ID = 5_000_300
-ACQUIRED_BASE_ID = 5_000_400
-# (vanilla_name, bit_index, region, stage, required_powers)
-_LOCS = [
-    ('Star Seal 1', 0, 'PrismPlains', '1', []),     # 2-1: forced into after Dedede, so in-logic with Prism Plains access
-    ('Star Seal 2', 1, 'CushyCloud', '2', []),
-    ('Star Seal 3', 2, 'JamJungle', '2', []),
-    ('Star Seal 4', 3, 'VocalVolcano', '1', []),
-    ('Star Seal 5', 4, 'IceIsland', '2', []),
-    ('Sound Player', 5, 'PrismPlains', '3', []),
-    ('Vitality Half 1', 6, 'PrismPlainsEX', '6', []),
-    ('Vitality Half 2', 7, 'NatureNotchEX', '6', []),
-    ('Vitality Half 3', 8, 'CushyCloudEX', '6', ['Sword', 'Beam', 'UFO', 'Magic']),
-    ('Vitality Half 4', 9, 'JamJungle', '3', []),
-    ('Vitality Half 5', 10, 'VocalVolcano', '3', ['Metal']),
-    ('Vitality Half 6', 11, 'IceIsland', '3', []),
-    ('Vitality Half 7', 12, 'SecretSeaEX', '6', []),
-    ('Vitality Half 8', 13, 'GambleGalaxy', '3', []),
-    ('Prism Plains Key', 14, 'PrismPlains', '4', []),
-    ('Nature Notch Key', 15, 'NatureNotch', '5', []),
-    ('Cushy Cloud Key', 16, 'CushyCloud', '4', []),
-    ('Jam Jungle Key', 17, 'JamJungle', '4', ['Fire', 'Hammer']),
-    ('Vocal Volcano Key', 18, 'VocalVolcano', '4', []),
-    ('Ice Island Key', 19, 'IceIsland', '4', []),
-    ('Secret Sea Key', 20, 'SecretSea', '4', []),
-    ('Ghost Medal 1', 21, 'NatureNotch', '2', []),
-    ('Ghost Medal 2', 22, 'CushyCloud', '3', ['Bomb', 'Cutter', 'Laser', 'UFO']),
-    ('Ghost Medal 3', 23, 'JamJungleEX', '6', []),
-    ('Ghost Medal 4', 24, 'VocalVolcanoEX', '6', []),
-    ('Ghost Medal 5', 25, 'IceIslandEX', '6', []),
-    ('Ghost Medal 6', 26, 'SecretSea', '2', ['Fire', 'Hammer']),
-    ('Ghost Medal 7', 27, 'GambleGalaxy', '2', []),
-    ('Fire Scroll', 28, 'PrismPlains', '3', ['Animal']),
-    ('Ice Scroll', 29, 'JamJungleEX', '6', []),
-    ('Spark Scroll', 30, 'CushyCloud', '1', []),
-    ('Beam Scroll', 31, 'NatureNotch', '5', []),
-    ('Tornado Scroll', 32, 'CushyCloud', '5', []),
-    ('Parasol Scroll', 33, 'VocalVolcano', '1', []),
-    ('Hammer Scroll', 34, 'VocalVolcano', '2', ['Beam', 'UFO']),
-    ('Cupid Scroll', 35, 'IceIsland', '5', []),
-    ('Cutter Scroll', 36, 'NatureNotch', '4', []),
-    ('Laser Scroll', 37, 'JamJungle', '5', []),
-    ('Bomb Scroll', 38, 'SecretSea', '3', []),
-    ('Wheel Scroll', 39, 'NatureNotch', '3', ['Fire', 'Wheel', 'Metal']),
-    ('HiJump Scroll', 40, 'CushyCloud', '4', []),
-    ('UFO Scroll', 41, 'GambleGalaxy', '1', []),
-    ('Sleep Scroll', 42, 'VocalVolcanoEX', '6', ['Metal', 'Hammer']),
-    ('Sword Scroll', 43, 'IceIsland', '1', []),
-    ('Ninja Scroll', 44, 'VocalVolcano', '3', ['Hammer', 'Fire', 'UFO', 'Throw']),
-    ('Fighter Scroll', 45, 'IceIsland', '3', ['Hammer', 'Metal']),
-    ('Throw Scroll', 46, 'SecretSea', '1', []),
-    ('Magic Scroll', 47, 'SecretSea', '4', []),
-    ('Animal Scroll', 48, 'PrismPlains', '1', []),  # 2-1: forced after Dedede
-    ('Bubble Scroll', 49, 'JamJungle', '1', []),
-    ('Metal Scroll', 50, 'JamJungle', '3', []),
-    ('Party Notes', 51, 'JamJungleEX', '6', []),
-    ('Beginning Notes', 52, 'PrismPlains', '2', []),
-    ('Happy Notes', 53, 'IceIsland', '4', []),
-    ('Spunky Notes', 54, 'SecretSea', '3', ['Fire']),
-    ('Battle Notes', 55, 'GambleGalaxy', '1', []),
-    ('Familiar Notes', 56, 'CushyCloud', '2', []),
-    ('Secret Notes', 57, 'GambleGalaxy', '3', ['UFO', 'Fire', 'Hammer']),
-    ("Kirby's Sounds", 58, 'PrismPlains', '1', []),  # 2-1: forced after Dedede
-    ('Enemy Sounds', 59, 'VocalVolcano', '1', []),
-    ('Sound Effects', 60, 'IceIsland', '1', []),
-    ('Secret Sounds', 61, 'SecretSea', '1', []),
-    ('King DeDeDe Badge', 62, 'PrismPlains', '7', []),
-    ('Mrs Moley Badge', 63, 'NatureNotch', '7', []),
-    ('Mecha-Kracko Badge', 64, 'CushyCloud', '7', []),
-    ('Yadgaine Badge', 65, 'JamJungle', '7', []),
-    ('Bohboh Badge', 66, 'VocalVolcano', '7', []),
-    ('Daroach Badge', 67, 'IceIsland', '7', []),
-    ('Meta Knight Badge', 68, 'SecretSea', '7', []),
-    ('Dark Nebula Badge', 69, 'GambleGalaxy', '7', []),
-    ('Yellow', 70, 'JamJungle', '2', []),
-    ('Red', 71, 'VocalVolcano', '4', []),
-    ('Green', 72, 'PrismPlains', '4', []),
-    ('Snow', 73, 'IceIsland', '2', []),
-    ('Carbon', 74, 'GambleGalaxy', '3', ['Animal']),
-    ('Ocean', 75, 'SecretSea', '4', []),
-    ('Sapphire', 76, 'SecretSea', '2', ['Fire']),
-    ('Grape', 77, 'CushyCloud', '1', ['Hammer', 'Fire', 'UFO', 'Throw']),
-    ('Emerald', 78, 'GambleGalaxy', '2', []),
-    ('Orange', 79, 'CushyCloudEX', '6', []),
-    ('Chocolate', 80, 'SecretSea', '5', ['Wheel']),
-    ('Cherry', 81, 'IceIslandEX', '6', ['Wheel']),
-    ('Chalk', 82, 'IceIsland', '4', ['Cutter', 'Sword', 'Magic', 'Cupid', 'Ninja']),
-    ('Shadow', 83, 'JamJungle', '1', ['HiJump', 'Laser']),
-    ('Ivory', 84, 'VocalVolcano', '2', ['Fire', 'Ice', 'Beam', 'UFO']),
-    ('Citrus', 85, 'NatureNotch', '2', []),
-    ('White', 86, 'SecretSea', '1', []),
-    ('Lavender', 87, 'CushyCloud', '4', ['Fire', 'Hammer']),
-    ('Check Copy Palette', 88, 'PrismPlains', '5', []),
-    ('Animal Copy Palette', 89, 'VocalVolcanoEX', '6', []),
-    ('Industrial Copy Palette', 90, 'JamJungle', '3', []),
-    ('Machine Copy Palette', 91, 'IceIsland', '5', []),
-    ('Pastel Copy Palette', 92, 'NatureNotch', '3', ['Bubble', 'Fire', 'Ice', 'UFO', 'Beam', 'Spark', 'Magic', 'Fighter', 'Bomb', 'Sword']),
-    ('Secret Map 1', 93, 'NatureNotchEX', '6', []),
-    ('Secret Map 2', 94, 'CushyCloud', '3', []),
-    ('Secret Map 3', 95, 'JamJungle', '4', ['Fire', 'Hammer']),
-    ('Secret Map 4', 96, 'VocalVolcano', '4', []),
-    ('Secret Map 5', 97, 'IceIslandEX', '6', []),
-    ('Secret Map 6', 98, 'SecretSeaEX', '6', []),
-    ('Secret Map 7', 99, 'GambleGalaxy', '2', []),
-    ('Graphic Piece 1', 100, 'PrismPlains', '4', []),
-    ('Graphic Piece 8', 101, 'SecretSea', '3', ['Fire', 'Beam', 'Bomb', 'Sword', 'UFO', 'Ice', 'Bubble', 'Magic']),
-    ('Graphic Piece 15', 102, 'IceIsland', '5', []),
-    ('Graphic Piece 9', 103, 'JamJungle', '1', ['Cutter', 'Bomb']),
-    ('Graphic Piece 18', 104, 'SecretSeaEX', '6', []),
-    ('Graphic Piece 12', 105, 'VocalVolcano', '3', ['Hammer', 'Metal']),
-    ('Graphic Piece 7', 106, 'CushyCloud', '3', []),
-    ('Graphic Piece 4', 107, 'NatureNotch', '5', ['Metal', 'Hammer', 'UFO', 'Fire', 'Throw']),
-    ('Graphic Piece 16', 108, 'SecretSea', '2', ['Fire']),
-    ('Graphic Piece 5', 109, 'NatureNotchEX', '6', ['Hammer', 'Metal']),
-    ('Graphic Piece 14', 110, 'IceIsland', '3', []),
-    ('Graphic Piece 3', 111, 'NatureNotch', '3', ['Animal']),
-    ('Graphic Piece 19', 112, 'GambleGalaxy', '1', ['Fire', 'Metal', 'Hammer']),
-    ('Graphic Piece 2', 113, 'PrismPlainsEX', '6', []),
-    ('Graphic Piece 6', 114, 'CushyCloud', '1', ['Bubble', 'Fire', 'UFO', 'Beam', 'Spark', 'Magic', 'Fighter', 'Bomb', 'Sword', 'Laser', 'Hammer']),
-    ('Graphic Piece 11', 115, 'VocalVolcano', '2', []),
-    ('Graphic Piece 13', 116, 'IceIsland', '1', ['Wheel', 'Animal']),
-    ('Graphic Piece 17', 117, 'CushyCloudEX', '6', []),
-    ('Graphic Piece 10', 118, 'JamJungle', '4', [])
-]
-# (name, 10*world+sub, region)
-_STAGECLEAR = [
-    ('Prism Plains 1 Clear', 0, 'PrismPlains'),
-    ('Prism Plains 2 Clear', 1, 'PrismPlains'),
-    ('Prism Plains 3 Clear', 2, 'PrismPlains'),
-    ('Prism Plains 4 Clear', 3, 'PrismPlains'),
-    ('Prism Plains 5 Clear', 4, 'PrismPlains'),
-    ('Prism Plains EX Clear', 5, 'PrismPlainsEX'),
-    ('Prism Plains Boss Clear', 6, 'PrismPlains'),
-    ('Nature Notch 1 Clear', 10, 'PrismPlains'),    # 2-1: forced after Dedede, in-logic with Prism Plains access
-    ('Nature Notch 2 Clear', 11, 'NatureNotch'),
-    ('Nature Notch 3 Clear', 12, 'NatureNotch'),
-    ('Nature Notch 4 Clear', 13, 'NatureNotch'),
-    ('Nature Notch 5 Clear', 14, 'NatureNotch'),
-    ('Nature Notch EX Clear', 15, 'NatureNotchEX'),
-    ('Nature Notch Boss Clear', 16, 'NatureNotch'),
-    ('Cushy Cloud 1 Clear', 20, 'CushyCloud'),
-    ('Cushy Cloud 2 Clear', 21, 'CushyCloud'),
-    ('Cushy Cloud 3 Clear', 22, 'CushyCloud'),
-    ('Cushy Cloud 4 Clear', 23, 'CushyCloud'),
-    ('Cushy Cloud 5 Clear', 24, 'CushyCloud'),
-    ('Cushy Cloud EX Clear', 25, 'CushyCloudEX'),
-    ('Cushy Cloud Boss Clear', 26, 'CushyCloud'),
-    ('Jam Jungle 1 Clear', 30, 'JamJungle'),
-    ('Jam Jungle 2 Clear', 31, 'JamJungle'),
-    ('Jam Jungle 3 Clear', 32, 'JamJungle'),
-    ('Jam Jungle 4 Clear', 33, 'JamJungle'),
-    ('Jam Jungle 5 Clear', 34, 'JamJungle'),
-    ('Jam Jungle EX Clear', 35, 'JamJungleEX'),
-    ('Jam Jungle Boss Clear', 36, 'JamJungle'),
-    ('Vocal Volcano 1 Clear', 40, 'VocalVolcano'),
-    ('Vocal Volcano 2 Clear', 41, 'VocalVolcano'),
-    ('Vocal Volcano 3 Clear', 42, 'VocalVolcano'),
-    ('Vocal Volcano 4 Clear', 43, 'VocalVolcano'),
-    # Vocal Volcano has only FOUR normal stages (WiKirby: 1-4, Boss, Secret), and the game's
-    # stage-clear bits pack SEQUENTIALLY after the stages that actually exist -- CONFIRMED in play:
-    # beating the boss fired slot 45 and beating EX fired slot 44. So EX = bit 4, Boss = bit 5.
-    # (Bit 6 is never set for this world, so nothing may be defined at slot 46.)
-    ('Vocal Volcano EX Clear', 44, 'VocalVolcanoEX'),
-    ('Vocal Volcano Boss Clear', 45, 'VocalVolcano'),
-    ('Ice Island 1 Clear', 50, 'IceIsland'),
-    ('Ice Island 2 Clear', 51, 'IceIsland'),
-    ('Ice Island 3 Clear', 52, 'IceIsland'),
-    ('Ice Island 4 Clear', 53, 'IceIsland'),
-    ('Ice Island 5 Clear', 54, 'IceIsland'),
-    ('Ice Island EX Clear', 55, 'IceIslandEX'),
-    ('Ice Island Boss Clear', 56, 'IceIsland'),
-    ('Secret Sea 1 Clear', 60, 'SecretSea'),
-    ('Secret Sea 2 Clear', 61, 'SecretSea'),
-    ('Secret Sea 3 Clear', 62, 'SecretSea'),
-    ('Secret Sea 4 Clear', 63, 'SecretSea'),
-    ('Secret Sea 5 Clear', 64, 'SecretSea'),
-    ('Secret Sea EX Clear', 65, 'SecretSeaEX'),
-    ('Secret Sea Boss Clear', 66, 'SecretSea'),
-    ('Gamble Galaxy 1 Clear', 70, 'GambleGalaxy'),
-    ('Gamble Galaxy 2 Clear', 71, 'GambleGalaxy'),
-    ('Gamble Galaxy 3 Clear', 72, 'GambleGalaxy'),
-    # Same sequential rule as Vocal Volcano: Gamble Galaxy has 3 stages and NO secret/EX stage, so
-    # its boss is bit 3 -- not bit 6. Slot 76 was never settable, which made it an impossible check
-    # (a progression item placed there = unwinnable seed). INFERRED from the VV evidence, not yet
-    # observed in play -- see the note in the release summary for the one-minute confirmation.
-    ('Gamble Galaxy Boss Clear', 73, 'GambleGalaxy')
-]
-# Ability-acquired locations: created only when the ability_checks option is on.
-# (name, ability_index, ability)  id = ACQUIRED_BASE_ID + index ; gated on Progressive <ability>.
-ACQUIRED_REGION_NAME = "PrismPlains"   # always-reachable; gated by the ability rule
-_ACQUIRED = [
-    ('Fire Ability', 0, 'Fire'), ('Ice Ability', 1, 'Ice'), ('Spark Ability', 2, 'Spark'),
-    ('Beam Ability', 3, 'Beam'), ('Tornado Ability', 4, 'Tornado'), ('Hammer Ability', 5, 'Hammer'),
-    ('Cupid Ability', 6, 'Cupid'), ('Cutter Ability', 7, 'Cutter'), ('Laser Ability', 8, 'Laser'),
-    ('Bomb Ability', 9, 'Bomb'), ('Wheel Ability', 10, 'Wheel'), ('HiJump Ability', 11, 'HiJump'),
-    ('UFO Ability', 12, 'UFO'), ('Sword Ability', 13, 'Sword'), ('Ninja Ability', 14, 'Ninja'),
-    ('Fighter Ability', 15, 'Fighter'), ('Throw Ability', 16, 'Throw'), ('Magic Ability', 17, 'Magic'),
-    ('Animal Ability', 18, 'Animal'), ('Bubble Ability', 19, 'Bubble'), ('Metal Ability', 20, 'Metal'),
-    ('Parasol Ability', 21, 'Parasol'), ('Sleep Ability', 22, 'Sleep')
-]
-ACQUIRED_ABILITY: Dict[str,str] = {n:a for n,i,a in _ACQUIRED}
-ACQUIRED_REGION_NAME = "PrismPlains"   # always-reachable; real gate is the Progressive item
-location_name_to_id: Dict[str,int] = {n: LOCATION_BASE_ID+i for n,i,r,s,p in _LOCS}
-for n,key,region in _STAGECLEAR: location_name_to_id[n]=STAGECLEAR_BASE_ID+key
-for n,i,a in _ACQUIRED: location_name_to_id[n]=ACQUIRED_BASE_ID+i
-LOCATION_REGION: Dict[str,str] = {n:r for n,i,r,s,p in _LOCS}
-for n,key,region in _STAGECLEAR: LOCATION_REGION[n]=region
-for n,i,a in _ACQUIRED: LOCATION_REGION[n]=ACQUIRED_REGION_NAME
-LOCATION_POWERS: Dict[str,list] = {n:p for n,i,r,s,p in _LOCS}
-# acquired locations live in their own list; created only when the option is on
-ACQUIRED_LOCATIONS = [n for n,i,a in _ACQUIRED]
-ALL_LOCATIONS=[n for n,i,r,s,p in _LOCS]+[n for n,key,region in _STAGECLEAR]
-VICTORY_EVENT="Strawberry Shortcake"
-class KSSLocation(Location):
-    game = "Kirby Squeak Squad"
+
+from . import Constants as C
+
+BASE_ID = 0x4B5000  # same region as items; location ids are BASE_ID + offset
+
+import pkgutil
+
+def _load_game_data():
+    # Works whether the world is a folder or a zipped .apworld: read the JSON as
+    # package data rather than via a filesystem path.
+    raw = pkgutil.get_data(__package__, "data/game_data.json")
+    return json.loads(raw.decode("utf-8"))
+
+_GAME_DATA = _load_game_data()
+
+
+class KirbyRobobotLocation(Location):
+    game = C.GAME_NAME
+
+
+@dataclass
+class LocData:
+    name: str
+    region: str
+    category: str                    # cube/sticker/rare/boss/subgame/etc
+    # ROM patch coordinates (None for event/clear locations detected via save flags)
+    file: Optional[str] = None
+    index: Optional[int] = None
+    wuid: Optional[int] = None
+    appear: str = "All"
+    code_offset: Optional[int] = None
+    # --- runtime memory mapping (filled for cubes / stickers) ---
+    level: Optional[str] = None       # "Level1".."Level6"
+    stage: Optional[str] = None       # "Stage1"..
+    slot_index: Optional[int] = None  # which of the 3 cubes in that stage
+    stage_index: Optional[int] = None # game's flat stage index (level*stages + n)
+    sticker_index: Optional[int] = None  # index into the 200-entry sticker array
+    # --- per-stage clear locations ---
+    area: Optional[int] = None        # 1..6 (Area number)
+    stage_no: Optional[int] = None    # 1-based stage number within the Area
+
+
+def _build_stage_bases() -> Dict[str, int]:
+    """Flat stage index the game uses: cubes live at base + stage_index*8.
+
+    This is no longer inferred it comes straight from the game's own
+    Cmn.StoryStageKind enum (extracted from mint/Default.bin), which maps
+    L1S1=0 ... L1S6=5, L2S1=6 ... L2S6=11, L3S1=12 ... L3S7=18, and so on.
+    It matches what we verified live on a real save (Area 1 = 9 cubes across
+    indices 0-5, Area 2 = 6 cubes across 6-11).
+    """
+    kinds = _GAME_DATA.get("enums", {}).get("StoryStageKind", {})
+    bases: Dict[str, int] = {}
+    for lvl_num in range(1, 7):
+        first = kinds.get(f"L{lvl_num}S1")
+        if first is not None:
+            bases[f"Level{lvl_num}"] = first
+    return bases
+
+
+STAGE_BASES = _build_stage_bases()
+
+
+def _stage_index(level: str, stage: str) -> Optional[int]:
+    """'Level2','Stage3' -> the game's flat StoryStageKind index."""
+    kinds = _GAME_DATA.get("enums", {}).get("StoryStageKind", {})
+    try:
+        lvl_num = int(level.replace("Level", ""))
+        stg_num = int(stage.replace("Stage", ""))
+    except ValueError:
+        return None
+    return kinds.get(f"L{lvl_num}S{stg_num}")
+
+
+def _level_region(level: str, stage: str = None) -> str:
+    return level if stage is None else f"{level} {stage}"
+
+
+def build_location_table() -> Dict[str, LocData]:
+    table: Dict[str, LocData] = {}
+
+    # --- Code Cubes (100) ---
+    # Named the way the game does: "Patched Plains Stage 2 - Code Cube 1".
+    for i, cube in enumerate(_GAME_DATA["code_cubes"]):
+        name = (f"{C.area_name(cube['level'])} "
+                f"Stage {C.stage_num(cube['stage'])} - "
+                f"Code Cube {cube['slotIndex'] + 1}")
+        table[name] = LocData(
+            name, _level_region(cube["level"], cube["stage"]), "cube",
+            file=cube["file"], index=cube["index"], wuid=cube["wuid"],
+            appear=cube["appear"],
+            level=cube["level"], stage=cube["stage"],
+            slot_index=cube["slotIndex"],
+            stage_index=_stage_index(cube["level"], cube["stage"]))
+
+    # --- Rare Stickers (35) ---
+    # "Rare Sticker: Ultra Sword (1-2)" the sticker's real name plus its stage.
+    for rare in _GAME_DATA["rare_stickers"]:
+        sticker = C.RARE_STICKER_NAMES.get(rare["rareKind"], rare["subKind"])
+        name = (f"Rare Sticker: {sticker} "
+                f"({C.area_num(rare['level'])}-{C.stage_num(rare['stage'])})")
+        table[name] = LocData(
+            name, _level_region(rare["level"], rare["stage"]), "rare",
+            file=rare["file"], index=rare["index"], wuid=rare["wuid"],
+            appear=rare["appear"],
+            level=rare["level"], stage=rare["stage"],
+            # Index into the 200-entry sticker array at save+0x82. Taken from the
+            # game's own romfs/yaml/Cmn/Sticker/Config.bin (stepRareKind field) and
+            # cross-checked against a live save (Rare019 -> index 89) and the
+            # community walkthrough's rare-sticker list.
+            sticker_index=rare["albumIndex"],
+            # Rare stickers you were SENT stay in your album permanently, so the
+            # album bit can no longer signal "found the physical one". These
+            # numbers let the client fall back to the stage's clear flag, which
+            # keeps the location obtainable either way.
+            area=C.area_num(rare["level"]),
+            stage_no=C.stage_num(rare["stage"]))
+
+    # --- Normal Stickers (165) ---
+    # A normal sticker pickup doesn't award a *specific* sticker: the game draws
+    # one from a pool (Cmn.Sticker.LotteryUtil). So "the sticker in stage X" isn't
+    # a stable thing to check for. What IS stable is the sticker itself: album
+    # slot N flipping to owned is a unique, identifiable event. So each sticker in
+    # the album is its own location, named for the sticker you actually got.
+    #
+    # Ten of them share a display name with another sticker ("Kirby" appears six
+    # times, from six different games). Location names have to be unique, so those
+    # duplicates used to overwrite each other and simply vanish from the pool.
+    # Any name used more than once is therefore tagged with its source game.
+    _album_normal = [e for e in _GAME_DATA["sticker_album"] if not e["rare"]]
+    _name_counts = {}
+    for entry in _album_normal:
+        _name_counts[entry["name"]] = _name_counts.get(entry["name"], 0) + 1
+    for entry in _album_normal:
+        base_name = entry["name"]
+        if _name_counts[base_name] > 1:
+            game = C.sticker_source_game(entry.get("internal", ""))
+            name = (f"Sticker: {base_name} ({game})" if game
+                    else f"Sticker: {base_name} #{entry['index']}")
+        else:
+            name = f"Sticker: {base_name}"
+        table[name] = LocData(
+            name, "Menu", "sticker",
+            sticker_index=entry["index"])
+
+    # --- Per-stage clears (every stage, including boss and EX) ---------------
+    # Detected from the save's stage array: byte 7 of each stage's 8-byte row.
+    # Named the way the game presents them, e.g. "Patched Plains Stage 1 Clear".
+    # Each Area's rows run: normal stages, then the boss, then EX. So the last
+    # two of every Area are not "Stage 5" and "Stage 6", they're the boss fight
+    # and the EX stage, and naming them by number was misleading.
+    # Each Area's rows run: normal stages, then the boss, then EX. Access Ark is
+    # the exception, with two more stages after its EX, so the boss and EX are
+    # NOT simply the last two there. Assuming they were made "Access Ark Boss
+    # Clear" point at a trailing stage while the real boss was published as
+    # "Stage 6 Clear", so the boss check fired for the wrong thing entirely.
+    # Positions come from the game's own layout rather than being counted from
+    # the end.
+    for _area in range(1, 7):
+        _lv = f"Level{_area}"
+        _layout = _GAME_DATA["level_layout"][_lv]
+        _boss_no = _layout["boss"]
+        _ex_no = _layout["ex"]
+        _count = len(_layout["normal"]) + 2 + len(_layout.get("extra", []))
+        for _st in range(1, _count + 1):
+            if _st == _boss_no:
+                _nm = f"{C.area_name(_lv)} Boss Clear"
+            elif _st == _ex_no:
+                _nm = f"{C.area_name(_lv)} EX Stage Clear"
+            else:
+                _nm = f"{C.area_name(_lv)} Stage {_st} Clear"
+            table[_nm] = LocData(_nm, _lv, "stage_clear",
+                                 area=_area, stage_no=_st)
+
+    # Two sets of locations used to live here and both are gone.
+    #
+    # "Unlock <Area> EX Stage": nothing in game corresponds to it. The EX stage
+    # simply opens once you hold enough of that Area's Code Cubes, so there was
+    # no moment to detect and the check could never be sent.
+    #
+    # "Clear <Level> (Boss Defeated)": the same event as that Area's Boss Clear
+    # above, listed twice. Only the stage-clear version is ever detected, so the
+    # duplicate sat in every seed as a check that could not be earned.
+
+    # Sub-game locations (3D Rumble, Team Kirby Clash, Meta Knightmare, The
+    # Arena, The True Arena) are not included. Detecting them needs save offsets
+    # for each sub-game's progress, which we haven't located, so they could never
+    # actually be checked.
+
+    # Assign stable IDs
+    for offset, name in enumerate(sorted(table.keys())):
+        table[name].code_offset = BASE_ID + offset
+
+    return table
+
+
+LOCATION_TABLE: Dict[str, LocData] = build_location_table()
+LOCATION_NAME_TO_ID: Dict[str, int] = {
+    n: d.code_offset for n, d in LOCATION_TABLE.items()
+}
+
+# Category -> option name that toggles it (None = always on)
+OPTIONAL_CATEGORIES = {
+    "subgame_rumble": "include_3d_rumble",
+    "subgame_clash": "include_kirby_clash",
+    "subgame_meta": "include_meta_knightmare",
+    "subgame_arena": "include_arena",
+    "subgame_true_arena": "include_true_arena",
+}

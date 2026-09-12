@@ -1,156 +1,177 @@
-"""Items for Kirby: Squeak Squad.
-Boss badges, keys, star seals, and Progressive Ability items are progression.
-Each copy ability is a Progressive item: x1 lets you USE the base ability
-(enforced by the connector's ability watchdog); x2 sets that ability's scroll
-bit in RAM, giving the upgraded scroll version.
 """
-from typing import Dict, Tuple
-from BaseClasses import Item, ItemClassification
-ITEM_BASE_ID = 5_000_000
-_IC = {"progression": ItemClassification.progression, "useful": ItemClassification.useful, "filler": ItemClassification.filler}
-_ITEMS = [
-    ('Star Seal 1', 0, 'progression'),
-    ('Star Seal 2', 1, 'progression'),
-    ('Star Seal 3', 2, 'progression'),
-    ('Star Seal 4', 3, 'progression'),
-    ('Star Seal 5', 4, 'progression'),
-    ('Sound Player', 5, 'filler'),
-    ('Vitality Half 1', 6, 'useful'),
-    ('Vitality Half 2', 7, 'useful'),
-    ('Vitality Half 3', 8, 'useful'),
-    ('Vitality Half 4', 9, 'useful'),
-    ('Vitality Half 5', 10, 'useful'),
-    ('Vitality Half 6', 11, 'useful'),
-    ('Vitality Half 7', 12, 'useful'),
-    ('Vitality Half 8', 13, 'useful'),
-    ('Prism Plains Key', 14, 'progression'),
-    ('Nature Notch Key', 15, 'progression'),
-    ('Cushy Cloud Key', 16, 'progression'),
-    ('Jam Jungle Key', 17, 'progression'),
-    ('Vocal Volcano Key', 18, 'progression'),
-    ('Ice Island Key', 19, 'progression'),
-    ('Secret Sea Key', 20, 'progression'),
-    ('Ghost Medal 1', 21, 'filler'),
-    ('Ghost Medal 2', 22, 'filler'),
-    ('Ghost Medal 3', 23, 'filler'),
-    ('Ghost Medal 4', 24, 'filler'),
-    ('Ghost Medal 5', 25, 'filler'),
-    ('Ghost Medal 6', 26, 'filler'),
-    ('Ghost Medal 7', 27, 'filler'),
-    ('Enemy Sounds', 59, 'filler'),
-    ('Animal Copy Palette', 89, 'filler'),
-    ('Party Notes', 51, 'filler'),
-    ('Beginning Notes', 52, 'filler'),
-    ('Happy Notes', 53, 'filler'),
-    ('Graphic Piece 17', 117, 'filler'),
-    ('Battle Notes', 55, 'filler'),
-    ('Familiar Notes', 56, 'filler'),
-    ('Secret Notes', 57, 'filler'),
-    ("Kirby's Sounds", 58, 'filler'),
-    ('Graphic Piece 13', 116, 'filler'),
-    ('Secret Sounds', 61, 'filler'),
-    ('King DeDeDe Badge', 62, 'progression'),
-    ('Mrs Moley Badge', 63, 'progression'),
-    ('Mecha-Kracko Badge', 64, 'progression'),
-    ('Yadgaine Badge', 65, 'progression'),
-    ('Bohboh Badge', 66, 'progression'),
-    ('Daroach Badge', 67, 'progression'),
-    ('Meta Knight Badge', 68, 'progression'),
-    ('Dark Nebula Badge', 69, 'filler'),
-    ('Yellow', 70, 'filler'),
-    ('Red', 71, 'filler'),
-    ('Green', 72, 'filler'),
-    ('Snow', 73, 'filler'),
-    ('Carbon', 74, 'filler'),
-    ('Ocean', 75, 'filler'),
-    ('Sapphire', 76, 'filler'),
-    ('Grape', 77, 'filler'),
-    ('Emerald', 78, 'filler'),
-    ('Graphic Piece 8', 101, 'filler'),
-    ('Chocolate', 80, 'filler'),
-    ('Cherry', 81, 'filler'),
-    ('Chalk', 82, 'filler'),
-    ('Shadow', 83, 'filler'),
-    ('Ivory', 84, 'filler'),
-    ('Citrus', 85, 'filler'),
-    ('White', 86, 'filler'),
-    ('Lavender', 87, 'filler'),
-    ('Check Copy Palette', 88, 'filler'),
-    ('Industrial Copy Palette', 90, 'filler'),
-    ('Machine Copy Palette', 91, 'useful'),
-    ('Pastel Copy Palette', 92, 'filler'),
-    ('Secret Map 1', 93, 'useful'),
-    ('Secret Map 2', 94, 'useful'),
-    ('Secret Map 3', 95, 'filler'),
-    ('Secret Map 4', 96, 'useful'),
-    ('Secret Map 5', 97, 'useful'),
-    ('Secret Map 6', 98, 'useful'),
-    ('Secret Map 7', 99, 'useful'),
-    ('Graphic Piece 1', 100, 'filler'),
-    ('Spunky Notes', 54, 'useful'),
-    ('Graphic Piece 15', 102, 'filler'),
-    ('Graphic Piece 9', 103, 'filler'),
-    ('Graphic Piece 18', 104, 'filler'),
-    ('Graphic Piece 12', 105, 'filler'),
-    ('Graphic Piece 7', 106, 'filler'),
-    ('Graphic Piece 4', 107, 'filler'),
-    ('Graphic Piece 16', 108, 'filler'),
-    ('Graphic Piece 5', 109, 'filler'),
-    ('Graphic Piece 14', 110, 'filler'),
-    ('Graphic Piece 3', 111, 'filler'),
-    ('Graphic Piece 19', 112, 'filler'),
-    ('Graphic Piece 2', 113, 'filler'),
-    ('Graphic Piece 6', 114, 'filler'),
-    ('Graphic Piece 11', 115, 'filler'),
-    ('Sound Effects', 60, 'filler'),
-    ('Orange', 79, 'filler'),
-    ('Graphic Piece 10', 118, 'useful')
-]
-# Progressive copy-ability items (replace the old per-ability scroll items).
-_PROGRESSIVE = [
-    ('Progressive Fire', 500, 'progression'),
-    ('Progressive Ice', 501, 'progression'),
-    ('Progressive Spark', 502, 'progression'),
-    ('Progressive Beam', 503, 'progression'),
-    ('Progressive Tornado', 504, 'progression'),
-    ('Progressive Hammer', 505, 'progression'),
-    ('Progressive Cupid', 506, 'progression'),
-    ('Progressive Cutter', 507, 'progression'),
-    ('Progressive Laser', 508, 'progression'),
-    ('Progressive Bomb', 509, 'progression'),
-    ('Progressive Wheel', 510, 'progression'),
-    ('Progressive HiJump', 511, 'progression'),
-    ('Progressive UFO', 512, 'progression'),
-    ('Progressive Sword', 513, 'progression'),
-    ('Progressive Ninja', 514, 'progression'),
-    ('Progressive Fighter', 515, 'progression'),
-    ('Progressive Throw', 516, 'progression'),
-    ('Progressive Magic', 517, 'progression'),
-    ('Progressive Animal', 518, 'progression'),
-    ('Progressive Bubble', 519, 'progression'),
-    ('Progressive Metal', 520, 'progression'),
-    ('Progressive Parasol', 521, 'progression'),
-    ('Progressive Sleep', 522, 'progression')
-]
-_FILLER = [
+Items.py Item table for Kirby: Planet Robobot AP world.
 
-    ('Maxim Tomato', 200, 'filler', 3),
-    ('Meat', 204, 'filler', 4),
-    ('Energy Drink', 201, 'filler', 4),
-    ('Cherries', 205, 'filler', 4),
-    ('1-Up', 202, 'filler', 4),
-    ('Hamburger', 206, 'filler', 2),
-    ('Nikuman', 207, 'filler', 2),
-    ('Omelet', 208, 'filler', 2),
-    ('Rice Ball', 209, 'filler', 2),
-    ('Pudding', 210, 'filler', 2)
-]
-ITEM_TABLE: Dict[str, Tuple] = {n:(_IC[c],1) for n,i,c in _ITEMS}
-for n,i,c in _PROGRESSIVE: ITEM_TABLE[n]=(_IC[c],2)          # two copies each
-for n,off,c,q in _FILLER: ITEM_TABLE[n]=(_IC[c],q)
-FILLER_NAMES = [n for n,off,c,q in _FILLER]
-item_name_to_id: Dict[str,int] = {n: ITEM_BASE_ID+i for n,i,c in _ITEMS}
-for n,i,c in _PROGRESSIVE: item_name_to_id[n]=ITEM_BASE_ID+i
-for n,off,c,q in _FILLER: item_name_to_id[n]=ITEM_BASE_ID+off
-class KSSItem(Item):
-    game = "Kirby Squeak Squad"
+Item ID space starts at BASE_ID. IDs are assigned deterministically so that
+seeds remain compatible as long as the ordering here does not change.
+"""
+from dataclasses import dataclass
+from typing import Dict, List, Optional
+
+from BaseClasses import Item, ItemClassification
+
+from . import Constants as C
+
+BASE_ID = 0x4B5000  # "KP" region, arbitrary but stable
+
+
+class KirbyRobobotItem(Item):
+    game = C.GAME_NAME
+
+
+@dataclass
+class ItemData:
+    name: str
+    classification: ItemClassification
+    count: int = 1          # how many copies exist in the pool by default
+    code_offset: Optional[int] = None  # filled in at module load
+
+
+# Progression items -----------------------------------------------------------
+_PROGRESSION: List[str] = []
+_USEFUL: List[str] = []
+_FILLER: List[str] = []
+
+# NOTE on Area/EX gating:
+# Robobot already gates progression itself each Area's boss ("firewall") needs
+# a number of Code Cubes, and an Area's EX stage needs *all* of that Area's
+# normal-stage cubes. Adding separate "Access to Area" and "EX Key" items on top
+# would be double-gating and less faithful to the game, so they're gone: Code
+# Cubes are the progression currency, exactly as in vanilla.
+
+# Copy abilities (27) progression because logic can require them
+for ab in C.COPY_ABILITIES:
+    _PROGRESSION.append(f"Ability: {ab}")
+
+# The Robobot Armor itself is NOT an item you get it when the game gives it to
+# you, as in vanilla. Only its individual modes are shuffled.
+# (14 modes)
+# items so the player physically regains armor use)
+for m in C.ARMOR_MODES:
+    _PROGRESSION.append(f"Armor Mode: {m}")
+
+# The sub-game access items (3D Rumble, Team Kirby Clash, Meta Knightmare, both
+# Arenas) used to live here, and so did an Ability Testing Room Key. None of them
+# did anything: we never found the save offsets that record that progress, so
+# receiving one had no effect in game and its location could not be checked.
+# They're out until those offsets are known, rather than sitting in the pool as
+# dead items taking up space that real checks could use.
+
+# 100 Code Cubes are progression (they unlock EX stages via count thresholds)
+CODE_CUBE = C.CODE_CUBE
+
+# 36 Rare Stickers: 35 in-stage + the all-cubes reward. Each is its own named
+# item ("Rare Sticker: Ultra Sword"), so receiving one puts that exact sticker in
+# your album.
+RARE_STICKER_ITEMS = [f"Rare Sticker: {n}" for n in C.RARE_STICKER_NAMES.values()]
+
+# Normal stickers, one item per album slot, named for the sticker itself.
+def _normal_sticker_items():
+    from .Locations import _GAME_DATA
+    # Names must match the location names exactly (see Locations.py): stickers
+    # whose display name is shared with another sticker are tagged with their
+    # source game, otherwise duplicates collapse into one entry.
+    album = [e for e in _GAME_DATA["sticker_album"] if not e["rare"]]
+    counts = {}
+    for e in album:
+        counts[e["name"]] = counts.get(e["name"], 0) + 1
+    out = []
+    for e in album:
+        if counts[e["name"]] > 1:
+            game = C.sticker_source_game(e.get("internal", ""))
+            out.append(f"Sticker: {e['name']} ({game})" if game
+                       else f"Sticker: {e['name']} #{e['index']}")
+        else:
+            out.append(f"Sticker: {e['name']}")
+    return out
+
+
+NORMAL_STICKER_ITEMS = _normal_sticker_items()
+
+# Filler items used to pad the pool so item/location counts match.
+# All are real in-game item kinds the bridge can spawn on receipt.
+ONE_UP = "1-Up"
+MAXIM_TOMATO = C.MAXIM_TOMATO      # full heal
+ENERGY_DRINK = C.ENERGY_DRINK      # restores 1/2
+INVINCIBLE_CANDY = C.INVINCIBLE_CANDY   # temporary invincibility
+
+# Real in-game foods (each restores 1/5 health) instead of a generic "Food".
+FOOD_ITEMS = list(C.FOOD_ITEMS)
+
+# Ordered by preference when padding: the ordinary foods first (they're the most
+# common pickup in the game), then 1-Ups, then the stronger heals and candy.
+FILLER_ITEMS = FOOD_ITEMS + [ONE_UP, ENERGY_DRINK, MAXIM_TOMATO, INVINCIBLE_CANDY]
+
+
+def build_item_table() -> Dict[str, ItemData]:
+    table: Dict[str, ItemData] = {}
+
+    # Copy abilities and most armor modes are 'useful': nice to have, never the
+    # only way into a location.
+    #
+    # The exception is an armor mode a stage is built around. 2-2 and 4-4 are
+    # Jet Mode stages, and everything in them sits inside the flying section, so
+    # Jet really is the key to those locations. Left as merely useful, fill was
+    # free to put Jet inside 2-2 itself, which made 2-2 need Jet to get Jet and
+    # generation rightly complained that those locations were unreachable.
+    _GATING_ARMOR = {"Armor Mode: %s" % m
+                     for m in C.STAGE_ARMOR_REQUIREMENT.values()}
+    _GATING_ARMOR |= {"Armor Mode: %s" % m
+                      for m in C.CUBE_ARMOR_REQUIREMENT.values()}
+    _GATING_ARMOR |= {"Armor Mode: %s" % m
+                      for m in C.RARE_STICKER_ARMOR_REQUIREMENT.values()}
+    # Copy abilities that a cube's puzzle genuinely requires must be progression
+    # too, for the same reason: if Sword stays merely useful, fill can drop it
+    # inside the very cube that needs Sword, and generation fails.
+    # The ANY_ABILITY sentinel names no particular item, so it contributes
+    # nothing here: a spot that takes any ability is satisfied by whichever one
+    # the seed happens to give you.
+    _GATING_ABILITY = {"Ability: %s" % ab
+                       for ab in C.CUBE_ABILITY_REQUIREMENT.values()
+                       if ab != C.ANY_ABILITY}
+    _GATING_ABILITY |= {"Ability: %s" % ab
+                        for ab in C.RARE_STICKER_ABILITY_REQUIREMENT.values()
+                        if ab != C.ANY_ABILITY}
+    _USEFUL_PREFIXES = ("Ability: ", "Armor Mode: ")
+    for name in _PROGRESSION:
+        if name in _GATING_ARMOR or name in _GATING_ABILITY:
+            table[name] = ItemData(name, ItemClassification.progression)
+        elif name.startswith(_USEFUL_PREFIXES):
+            table[name] = ItemData(name, ItemClassification.useful)
+        else:
+            table[name] = ItemData(name, ItemClassification.progression)
+
+    # Code Cubes: per-Area items (matching vanilla cube counts) so each Area's
+    # boss firewall counts only its own cubes. progression_skip_balancing so they
+    # gate bosses/EX without distorting fill balancing.
+    for _lv, _cnt in C.AREA_CUBE_COUNTS.items():
+        _nm = C.area_cube_name(_lv)
+        table[_nm] = ItemData(
+            _nm, ItemClassification.progression_skip_balancing, count=_cnt)
+
+    # Rare stickers, named for the sticker you actually get. All stickers are
+    # filler: they're collectibles, never gate anything.
+    for nm in RARE_STICKER_ITEMS:
+        table[nm] = ItemData(nm, ItemClassification.filler)
+
+    # Normal stickers, likewise one named item each.
+    for nm in NORMAL_STICKER_ITEMS:
+        table[nm] = ItemData(nm, ItemClassification.filler)
+    # NOTE: there is deliberately no "all cubes" reward item. It had no
+    # matching location, so it could be received but never checked.
+
+    # Filler items (count=0: created on demand to pad the pool)
+    for filler_name in FILLER_ITEMS:
+        table[filler_name] = ItemData(
+            filler_name, ItemClassification.filler, count=0)
+
+    # Assign stable IDs
+    for offset, name in enumerate(sorted(table.keys())):
+        table[name].code_offset = BASE_ID + offset
+
+    return table
+
+
+ITEM_TABLE: Dict[str, ItemData] = build_item_table()
+ITEM_NAME_TO_ID: Dict[str, int] = {
+    name: data.code_offset for name, data in ITEM_TABLE.items()
+}
